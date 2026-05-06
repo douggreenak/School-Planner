@@ -24,11 +24,11 @@ export function buildDaySchedule(
       const override = disruption.periodOverrides.find(
         (o) => o.period === classInfo.period
       );
-      if (override) {
+    if (override) {
         return {
           classInfo,
-          startTime: override.cancelled ? classInfo.startTime : override.startTime,
-          endTime: override.cancelled ? classInfo.endTime : override.endTime,
+          startTime: override.cancelled ? (classInfo.dayTimes?.[dayOfWeek]?.startTime || classInfo.startTime) : override.startTime,
+          endTime: override.cancelled ? (classInfo.dayTimes?.[dayOfWeek]?.endTime || classInfo.endTime) : override.endTime,
           cancelled: override.cancelled,
         };
       }
@@ -36,7 +36,13 @@ export function buildDaySchedule(
         return { classInfo, startTime: classInfo.startTime, endTime: classInfo.endTime, cancelled: true };
       }
     }
-    return { classInfo, startTime: classInfo.startTime, endTime: classInfo.endTime, cancelled: false };
+    // Use per-day override times if present, otherwise class-level times.
+    return {
+      classInfo,
+      startTime: classInfo.dayTimes?.[dayOfWeek]?.startTime || classInfo.startTime,
+      endTime: classInfo.dayTimes?.[dayOfWeek]?.endTime || classInfo.endTime,
+      cancelled: false,
+    };
   });
 
   entries.sort((a, b) => a.startTime.localeCompare(b.startTime));

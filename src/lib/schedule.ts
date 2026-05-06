@@ -76,7 +76,14 @@ export function generateEarlyOutOverrides(
   classes: SchoolClass[],
   earlyEndTime: string
 ): { period: number; startTime: string; endTime: string; cancelled: boolean }[] {
-  const sorted = [...classes].sort((a, b) => a.startTime.localeCompare(b.startTime));
+  // Sort by effective start time for the day — if a class has per-day
+  // overrides we prefer the earliest of those for ordering. Fall back to
+  // the class default startTime when no per-day override exists.
+  const sorted = [...classes].sort((a, b) => {
+    const aStart = (a.dayTimes && a.dayTimes[1]?.startTime) || a.startTime; // arbitrary weekday used for ordering
+    const bStart = (b.dayTimes && b.dayTimes[1]?.startTime) || b.startTime;
+    return aStart.localeCompare(bStart);
+  });
   if (sorted.length === 0) return [];
 
   const firstStart = timeToMinutes(sorted[0].startTime);
@@ -106,7 +113,11 @@ export function generateLateStartOverrides(
   classes: SchoolClass[],
   lateStartTime: string
 ): { period: number; startTime: string; endTime: string; cancelled: boolean }[] {
-  const sorted = [...classes].sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const sorted = [...classes].sort((a, b) => {
+    const aStart = (a.dayTimes && a.dayTimes[1]?.startTime) || a.startTime;
+    const bStart = (b.dayTimes && b.dayTimes[1]?.startTime) || b.startTime;
+    return aStart.localeCompare(bStart);
+  });
   if (sorted.length === 0) return [];
 
   const originalFirstStart = timeToMinutes(sorted[0].startTime);

@@ -45,8 +45,7 @@ import QrCodeIcon from '@mui/icons-material/QrCode';
 import DevicesIcon from '@mui/icons-material/Devices';
 import LockIcon from '@mui/icons-material/Lock';
 import { useClasses } from '@/lib/hooks';
-import Checkbox from '@mui/material/Checkbox';
-import FormControlLabel from '@mui/material/FormControlLabel';
+import type { SchoolClass } from '@/types';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 
@@ -61,7 +60,7 @@ export default function SettingsPage() {
 function SettingsInner() {
   const searchParams = useSearchParams();
   const { refetch: refetchClasses } = useClasses();
-  const { data: importedClasses, loading: classesLoading, refetch: refetchClassesList, mutate: mutateClasses } = useClasses();
+  const { data: importedClasses, loading: classesLoading, refetch: refetchClassesList } = useClasses();
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'info' });
   const [syncing, setSyncing] = useState<string | null>(null);
 
@@ -148,7 +147,7 @@ function SettingsInner() {
   const [showGeneratePassphrase, setShowGeneratePassphrase] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardIndex, setWizardIndex] = useState(0);
-  const [editableClass, setEditableClass] = useState<any>(null);
+  const [editableClass, setEditableClass] = useState<SchoolClass | null>(null);
 
   useEffect(() => {
     setCalendarUrl(`${window.location.origin}/api/calendar?token=${calendarToken || 'your-token'}`);
@@ -986,7 +985,7 @@ function SettingsInner() {
                     {classesLoading && <CircularProgress />}
                     {!classesLoading && importedClasses && (
                       <Stack spacing={1}>
-                        {importedClasses.map((c: any) => (
+                        {importedClasses.map((c: SchoolClass) => (
                           <Box key={c.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Button size="small" onClick={() => { setEditableClass(c); setWizardIndex(1); }}>
                               Edit
@@ -1007,19 +1006,19 @@ function SettingsInner() {
                         <TextField fullWidth label="Period" type="number" value={editableClass.period || ''} onChange={(e) => setEditableClass({ ...editableClass, period: parseInt(e.target.value || '0', 10) || 0 })} />
                       </Grid>
                       <Grid size={6}>
-                        <TextField fullWidth label="Start Time" type="time" value={editableClass.startTime || '08:00'} onChange={(e) => setEditableClass({ ...editableClass, startTime: e.target.value })} InputLabelProps={{ shrink: true }} />
+                        <TextField fullWidth label="Start Time" type="time" value={editableClass.startTime || '08:00'} onChange={(e) => setEditableClass({ ...editableClass, startTime: e.target.value })} slotProps={{ inputLabel: { shrink: true } }} />
                       </Grid>
                       <Grid size={6}>
-                        <TextField fullWidth label="End Time" type="time" value={editableClass.endTime || '08:50'} onChange={(e) => setEditableClass({ ...editableClass, endTime: e.target.value })} InputLabelProps={{ shrink: true }} />
+                        <TextField fullWidth label="End Time" type="time" value={editableClass.endTime || '08:50'} onChange={(e) => setEditableClass({ ...editableClass, endTime: e.target.value })} slotProps={{ inputLabel: { shrink: true } }} />
                       </Grid>
                       <Grid size={12}>
                         <Typography variant="body2">Days</Typography>
                         <Box>
                           {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d, idx) => (
                             <FormControlLabel key={d} control={<Checkbox checked={(editableClass.days || []).includes(idx)} onChange={(e) => {
-                              const days = new Set(editableClass.days || []);
+                              const days = new Set<number>(editableClass.days || []);
                               if (e.target.checked) days.add(idx); else days.delete(idx);
-                              setEditableClass({ ...editableClass, days: Array.from(days).sort((a:any,b:any)=>a-b) });
+                              setEditableClass({ ...editableClass, days: Array.from(days).sort((a,b)=>a-b) });
                             }} />} label={d} />
                           ))}
                         </Box>

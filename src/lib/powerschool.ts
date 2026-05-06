@@ -989,7 +989,7 @@ export async function scrapePowerSchool(
                 }
                 // As a last resort, collect descendant text nodes.
                 let acc = '';
-                const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+                const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
                 let nodeText: Node | null;
                 while ((nodeText = walker.nextNode())) {
                   acc += ' ' + (nodeText.nodeValue || '');
@@ -1576,6 +1576,8 @@ export async function scrapePowerSchool(
         startTime,
         endTime,
         days,
+        // No per-day times from PowerSchool matrix for now; keep undefined.
+        dayTimes: undefined,
         semester: 'Current',
         source: 'powerschool' as const,
         sourceId: c.sourceId,

@@ -12,6 +12,10 @@ export interface SchoolClass {
   startTime: string; // HH:mm
   endTime: string;   // HH:mm
   days: number[];    // 0=Sun … 6=Sat
+  // Optional per-day override times. Key is weekday number (0=Sun..6=Sat).
+  // When present the calendar and views should prefer these times for the
+  // corresponding weekday; missing days fall back to `startTime`/`endTime`.
+  dayTimes?: Record<number, { startTime: string; endTime: string }>;
   semester: string;
   // --- PowerSchool / Classroom sync fields (optional) ---
   source?: 'manual' | 'powerschool' | 'classroom';

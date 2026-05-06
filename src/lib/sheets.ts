@@ -168,7 +168,7 @@ export async function initializeSpreadsheet() {
   const requiredSheets: { name: SheetName; headers: string[] }[] = [
     {
       name: 'Classes',
-      headers: ['id', 'name', 'teacher', 'room', 'color', 'period', 'startTime', 'endTime', 'days', 'semester', 'source', 'sourceId', 'grade', 'gradePercent'],
+    headers: ['id', 'name', 'teacher', 'room', 'color', 'period', 'startTime', 'endTime', 'days', 'dayTimes', 'semester', 'source', 'sourceId', 'grade', 'gradePercent'],
     },
     {
       name: 'Homework',
@@ -224,11 +224,12 @@ function rowToClass(row: string[]): SchoolClass {
     startTime: row[6],
     endTime: row[7],
     days: JSON.parse(row[8] || '[]'),
-    semester: row[9],
-    source: (row[10] as SchoolClass['source']) || undefined,
-    sourceId: row[11] || undefined,
-    grade: row[12] || undefined,
-    gradePercent: row[13] ? parseFloat(row[13]) : undefined,
+    dayTimes: (() => { try { return JSON.parse(row[9] || '{}'); } catch { return undefined; } })(),
+    semester: row[10],
+    source: (row[11] as SchoolClass['source']) || undefined,
+    sourceId: row[12] || undefined,
+    grade: row[13] || undefined,
+    gradePercent: row[14] ? parseFloat(row[14]) : undefined,
   };
 }
 
@@ -243,6 +244,7 @@ function classToRow(c: SchoolClass): string[] {
     c.startTime,
     c.endTime,
     JSON.stringify(c.days),
+    c.dayTimes ? JSON.stringify(c.dayTimes) : '',
     c.semester,
     c.source ?? '',
     c.sourceId ?? '',
