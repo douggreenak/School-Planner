@@ -373,17 +373,22 @@ function SettingsInner() {
           // matched manual rows to their PowerSchool sourceId. This will
           // update the Classes sheet in place and is reversible only by
           // manual edits in the sheet, so require confirmation.
-          if (confirm('PowerSchool suggested schedule matches were found. Run a one-time migration to link matching manual classes to their PowerSchool entries (recommended)?')) {
+            if (confirm('PowerSchool suggested schedule matches were found. Run a one-time migration to link matching manual classes to their PowerSchool entries (recommended)?')) {
             setSyncing('migrating');
             try {
               const resp = await fetch('/api/powerschool/migrate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-              const j = await resp.json();
-              if (resp.ok && j.migrated) {
-                setSnackbar({ open: true, message: `Migration complete: ${j.migrated} classes linked.`, severity: 'success' });
+              const j = await resp.json().catch(() => ({}));
+              if (resp.ok && j && j.success) {
+                const migratedCount = Number(j.migrated || 0);
+                if (migratedCount > 0) {
+                  setSnackbar({ open: true, message: `Migration complete: ${migratedCount} classes linked.`, severity: 'success' });
+                } else {
+                  setSnackbar({ open: true, message: 'Migration complete: no manual classes needed linking.', severity: 'info' });
+                }
                 refetchClassesList();
                 refetchClasses();
               } else {
-                setSnackbar({ open: true, message: j.error || 'Migration failed', severity: 'error' });
+                setSnackbar({ open: true, message: (j && j.error) ? j.error : 'Migration failed', severity: 'error' });
               }
             } catch (err) {
               setSnackbar({ open: true, message: `Migration error: ${(err as Error).message}`, severity: 'error' });

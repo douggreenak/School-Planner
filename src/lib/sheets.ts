@@ -467,6 +467,81 @@ export async function syncClassesFromSource(
   const toUpdate: { rowIndex: number; values: string[] }[] = [];
   const toAppend: string[][] = [];
 
+  // If this is a PowerSchool sync, replace the Classes sheet so it mirrors
+  // exactly the incoming PowerSchool classes. However, before throwing away
+  // everything, attempt to reuse any existing persisted rows that clearly
+  // correspond to an incoming class (by sourceId or by normalized name+period)
+  // so user-managed fields (colors, per-day overrides, chosen numeric period)
+  // can be preserved. Any existing rows that are not matched are removed.
+  if (source === 'powerschool') {
+    // Build a lookup of manual/other rows keyed by normalized name||period so
+    // we can reuse them when an incoming class appears to be the same.
+    const manualMap = new Map<string, { cls: SchoolClass; rowIdx: number }>();
+    for (const e of existing) {
+      if (e.cls.source === 'powerschool') continue;
+      const key = `${normalizeName(e.cls.name)}||${e.cls.period || ''}`;
+      if (!manualMap.has(key)) manualMap.set(key, e);
+    }
+
+    const toUpdateLocal: { rowIndex: number; values: string[] }[] = [];
+    const toAppendAll: string[][] = [];
+    const keptIds = new Set<string>();
+    let psAdded = 0;
+    let psUpdated = 0;
+
+    for (const cls of incoming) {
+      // Prefer an existing persisted row that already has the same sourceId.
+      let prior = cls.sourceId ? bySourceId.get(cls.sourceId) : undefined;
+      // Otherwise try to match a manual/other row by normalized name+period.
+      if (!prior) {
+        const key = `${normalizeName(cls.name)}||${cls.period || ''}`;
+        const manual = manualMap.get(key);
+        if (manual) prior = manual;
+      }
+
+      if (prior) {
+        // Merge into the existing persisted row, preserving local schedule
+        // overrides where present.
+        const merged: SchoolClass = {
+          ...prior.cls,
+          ...cls,
+          id: prior.cls.id,
+          color: prior.cls.color || cls.color,
+          source,
+          sourceId: cls.sourceId,
+        };
+        if (prior.cls.days && Array.isArray(prior.cls.days) && prior.cls.days.length > 0) merged.days = prior.cls.days;
+        if (prior.cls.startTime && prior.cls.startTime.trim()) merged.startTime = prior.cls.startTime;
+        if (prior.cls.endTime && prior.cls.endTime.trim()) merged.endTime = prior.cls.endTime;
+        if (prior.cls.dayTimes && Object.keys(prior.cls.dayTimes).length > 0) merged.dayTimes = prior.cls.dayTimes;
+        if (prior.cls.period && Number(prior.cls.period) > 0) merged.period = prior.cls.period;
+
+        toUpdateLocal.push({ rowIndex: prior.rowIdx, values: classToRow(merged) });
+        idMap.set(cls.id, prior.cls.id);
+        psUpdated++;
+        keptIds.add(prior.cls.id);
+      } else {
+        toAppendAll.push(classToRow({ ...cls, source }));
+        idMap.set(cls.id, cls.id);
+        psAdded++;
+      }
+    }
+
+    // Any existing row not included in `keptIds` should be removed so the
+    // Classes sheet contains only classes that appeared in PowerSchool.
+    const rowsToDelete: number[] = [];
+    for (const e of existing) {
+      if (!keptIds.has(e.cls.id)) rowsToDelete.push(e.rowIdx);
+    }
+
+    // Flush: update matched rows, append new rows, then delete old unmatched rows.
+    await batchUpdateRows('Classes', toUpdateLocal);
+    await appendRows('Classes', toAppendAll);
+    await deleteRowsBatch('Classes', rowsToDelete);
+
+    return { added: psAdded, updated: psUpdated, removed: rowsToDelete.length, idMap };
+  }
+
   for (const cls of incoming) {
     if (!cls.sourceId) {
       // Incoming class has no stable key — just append. Can't dedupe it against
