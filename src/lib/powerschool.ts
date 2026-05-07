@@ -27,6 +27,8 @@ export interface ScrapedSchedule {
   classes: SchoolClass[];
   assignments: Homework[];
   log: string[];
+  // Optional map of scraped-class-id -> matrix suggestion (days + optional times)
+  matrixByScrapedClassId?: Record<string, { days: number[]; startTime?: string; endTime?: string } | undefined>;
 }
 
 const CLASS_COLORS = [
@@ -1481,6 +1483,7 @@ export async function scrapePowerSchool(
     // list is a PowerSchool implementation detail and is intentionally NOT
     // stored on SchoolClass (frns change per term).
     const classTermFrns = new Map<string, TermFrn[]>();
+    const matrixByScrapedClassId: Record<string, { days: number[]; startTime?: string; endTime?: string } | undefined> = {};
     const classes: SchoolClass[] = rawClasses.map((c, i) => {
       // Default bell times; overridden by the matrix if we found one.
       const bell = defaultBellTime(c.period || (i + 1));
@@ -1566,7 +1569,7 @@ export async function scrapePowerSchool(
       // quarter. This answers "pull semester grades, not just quarter grades".
       const best = pickBestTerm(c.termFrns);
 
-      const cls: SchoolClass = {
+       const cls: SchoolClass = {
         id: uuid(),
         name: c.name,
         teacher: c.teacher || 'TBD',
@@ -1584,6 +1587,14 @@ export async function scrapePowerSchool(
         grade: best?.grade || undefined,
         gradePercent: best?.gradePercent ?? undefined,
       };
+      // If we had a matched matrix entry for this class, record it under
+      // the scraped class id so callers (the API route) can map it to the
+      // persisted class id after sync.
+      if (mx && cls.id) {
+        matrixByScrapedClassId[cls.id] = { days: mx.days.slice(), startTime: mx.startTime, endTime: mx.endTime };
+      } else {
+        matrixByScrapedClassId[cls.id] = undefined;
+      }
       if (c.termFrns.length > 0) classTermFrns.set(cls.id, c.termFrns);
       if (best) {
         log.push(`  - ${c.name}: grade from ${best.term || best.termType} column (${best.grade || ''}${best.gradePercent !== null ? ` ${best.gradePercent}%` : ''})`);
@@ -2025,7 +2036,7 @@ export async function scrapePowerSchool(
     const withFlag = assignments.filter((a) => !!a.flags).length;
     log.push(`Found ${assignments.length} assignments total (${withPct} with %, ${withFlag} with flag)`);
 
-    return { classes, assignments, log };
+    return { classes, assignments, log, matrixByScrapedClassId };
   } catch (err) {
     log.push(`ERROR: ${(err as Error).message}`);
     throw new Error(`PowerSchool scrape failed: ${(err as Error).message}\n\nLog:\n${log.join('\n')}`);

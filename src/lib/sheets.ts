@@ -438,6 +438,22 @@ export async function syncClassesFromSource(
     }
   }
 
+  // Lightweight name normalizer for matching manual rows to incoming PS classes.
+  const normalizeName = (s?: string | null) => (s ? s.replace(/\u00A0/g, ' ').replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase() : '');
+
+  // Helper to try to match an incoming PS class to an existing manual row by
+  // normalized name + numeric period. Returns the existing entry or undefined.
+  const matchManualByNameAndPeriod = (cls: SchoolClass) => {
+    const nameNorm = normalizeName(cls.name);
+    if (!nameNorm) return undefined;
+    return existing.find((e) => {
+      // Only consider manual rows (not already tagged with this source)
+      if (e.cls.source && e.cls.source !== 'manual' && e.cls.source !== undefined) return false;
+      if ((e.cls.period || 0) !== (cls.period || 0)) return false;
+      return normalizeName(e.cls.name) === nameNorm;
+    });
+  };
+
   let added = 0;
   let updated = 0;
   const keptRowIds = new Set<string>();
@@ -451,7 +467,7 @@ export async function syncClassesFromSource(
   const toUpdate: { rowIndex: number; values: string[] }[] = [];
   const toAppend: string[][] = [];
 
-    for (const cls of incoming) {
+  for (const cls of incoming) {
     if (!cls.sourceId) {
       // Incoming class has no stable key — just append. Can't dedupe it against
       // existing rows, so treat every such class as brand new each sync.
@@ -460,21 +476,36 @@ export async function syncClassesFromSource(
       added++;
       continue;
     }
-    const prior = bySourceId.get(cls.sourceId);
+
+    // First try to find a persisted row by sourceId.
+    let prior = bySourceId.get(cls.sourceId);
+    // If not found, try to match a manually-created class by normalized name + period.
+    if (!prior) {
+      const norm = normalizeName(cls.name);
+      const found = existing.find((e) => {
+        // Skip rows already from this source.
+        if (e.cls.source === source) return false;
+        if ((e.cls.period || 0) !== (cls.period || 0)) return false;
+        return normalizeName(e.cls.name) === norm;
+      });
+      if (found) prior = found;
+    }
+
     if (prior) {
-      // Update in place, keeping the user's chosen color and the stable UUID
-      // (so homework foreign keys remain valid). Additionally, preserve any
-      // user-managed schedule fields (days, startTime, endTime, period) so
-      // repeated PowerSchool syncs don't overwrite the local schedule the
-      // user configured in the Settings wizard.
+      // Link the existing row to the incoming source and update it.
       const merged: SchoolClass = {
         ...prior.cls,
         ...cls,
         id: prior.cls.id,
         color: prior.cls.color || cls.color,
         source,
+        // ensure persisted row records the external sourceId
+        sourceId: cls.sourceId,
       };
-      // Preserve schedule overrides from the persisted row when present.
+      // Preserve user-managed schedule fields when present so repeated
+      // PowerSchool syncs don't stomp local customizations. We prefer the
+      // persisted values for days, start/end times, per-day overrides, and
+      // numeric period when they are explicitly set by the user.
       if (prior.cls.days && Array.isArray(prior.cls.days) && prior.cls.days.length > 0) merged.days = prior.cls.days;
       if (prior.cls.startTime && prior.cls.startTime.trim()) merged.startTime = prior.cls.startTime;
       if (prior.cls.endTime && prior.cls.endTime.trim()) merged.endTime = prior.cls.endTime;

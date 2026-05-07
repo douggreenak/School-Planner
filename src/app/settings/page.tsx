@@ -129,6 +129,9 @@ function SettingsInner() {
   const [psUser, setPsUser] = useState('');
   const [psPass, setPsPass] = useState('');
   const [psLog, setPsLog] = useState<string[]>([]);
+  const [psMatrixSuggestions, setPsMatrixSuggestions] = useState<Record<string, { days: number[]; startTime?: string; endTime?: string }>>({});
+  // Normalize names client-side for matching to PowerSchool rows
+  const normalizeName = (s?: string | null) => (s ? String(s).replace(/\u00A0/g, ' ').replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase() : '');
 
   // Google Classroom OAuth
   const [classroomClientId, setClassroomClientId] = useState('');
@@ -325,6 +328,7 @@ function SettingsInner() {
   const syncPowerSchool = async () => {
     setSyncing('powerschool');
     setPsLog([]);
+    setPsMatrixSuggestions({});
     try {
       // If the password field is blank, fall back to the saved server-side password.
       // Otherwise pass the form values (which also triggers re-saving them server-side).
@@ -340,6 +344,7 @@ function SettingsInner() {
       });
       const data = await res.json();
       if (data.log) setPsLog(data.log);
+      if (data.matrixByClassId) setPsMatrixSuggestions(data.matrixByClassId);
       if (data.success) {
         const parts: string[] = [];
         if (data.classAdded) parts.push(`${data.classAdded} added`);
@@ -358,6 +363,34 @@ function SettingsInner() {
         // Refresh setup status so the "saved" pill shows up after a fresh save
         const status = await fetch('/api/setup').then((r) => r.json());
         setSetupStatus(status);
+        // If the server returned matrix suggestions, also offer a one-time
+        // migration prompt to link existing manual rows to PowerSchool when
+        // heuristics suggest a match. This prevents duplicate classes on
+        // subsequent imports. We only do this when there are suggestions
+        // and when the user opted to allow migrations via a simple confirm.
+        if (data.matrixByClassId && Object.keys(data.matrixByClassId).length > 0) {
+          // Ask the user whether to run an automatic migration linking
+          // matched manual rows to their PowerSchool sourceId. This will
+          // update the Classes sheet in place and is reversible only by
+          // manual edits in the sheet, so require confirmation.
+          if (confirm('PowerSchool suggested schedule matches were found. Run a one-time migration to link matching manual classes to their PowerSchool entries (recommended)?')) {
+            setSyncing('migrating');
+            try {
+              const resp = await fetch('/api/powerschool/migrate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+              const j = await resp.json();
+              if (resp.ok && j.migrated) {
+                setSnackbar({ open: true, message: `Migration complete: ${j.migrated} classes linked.`, severity: 'success' });
+                refetchClassesList();
+                refetchClasses();
+              } else {
+                setSnackbar({ open: true, message: j.error || 'Migration failed', severity: 'error' });
+              }
+            } catch (err) {
+              setSnackbar({ open: true, message: `Migration error: ${(err as Error).message}`, severity: 'error' });
+            }
+            setSyncing(null);
+          }
+        }
       } else {
         setSnackbar({ open: true, message: data.error || 'PowerSchool import failed', severity: 'error' });
       }
@@ -961,14 +994,46 @@ function SettingsInner() {
               Create and edit your internal schedule. Pick from classes imported from PowerSchool and set the days, period, and times the app should use. PowerSchool syncs will preserve these manual schedule fields.
             </Typography>
 
-            <Box sx={{ mb: 2 }}>
-              <Button variant="contained" onClick={() => { setWizardOpen(true); setWizardIndex(0); }} disabled={classesLoading || !importedClasses}>
-                Open Schedule Wizard
-              </Button>
-              <Button variant="text" sx={{ ml: 2 }} onClick={() => refetchClassesList()} disabled={classesLoading}>
-                Refresh Classes
-              </Button>
-            </Box>
+              <Box sx={{ mb: 2 }}>
+                <Button variant="contained" onClick={() => { setWizardOpen(true); setWizardIndex(0); }} disabled={classesLoading || !importedClasses}>
+                  Open Schedule Wizard
+                </Button>
+                <Button variant="outlined" sx={{ ml: 2 }} onClick={async () => {
+                  if (!importedClasses || importedClasses.length === 0) return;
+                  if (!confirm('Apply the default bell schedule to all classes? This will set days to Mon–Fri and update start/end times per period.')) return;
+                  setSyncing('apply-default');
+                  try {
+                    // Lathrop HS default bell times (Mon–Fri)
+                    const template: Record<number, { start: string; end: string; days: number[] }> = {
+                      1: { start: '07:30', end: '08:24', days: [1,2,3,4,5] },
+                      2: { start: '08:31', end: '09:25', days: [1,2,3,4,5] },
+                      3: { start: '09:32', end: '10:26', days: [1,2,3,4,5] },
+                      4: { start: '11:04', end: '11:58', days: [1,2,3,4,5] },
+                      5: { start: '12:05', end: '12:59', days: [1,2,3,4,5] },
+                      6: { start: '13:06', end: '14:20', days: [1,2,3,4,5] },
+                    };
+                    const promises: Promise<Response>[] = [];
+                    for (const c of importedClasses) {
+                      const slot = template[c.period || 0];
+                      if (!slot) continue;
+                      const updated = { ...c, startTime: slot.start, endTime: slot.end, days: slot.days, dayTimes: c.dayTimes };
+                      promises.push(fetch('/api/classes', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }));
+                    }
+                    await Promise.all(promises);
+                    setSnackbar({ open: true, message: 'Default bell schedule applied. Review your classes and Save any edits you make.', severity: 'success' });
+                    refetchClassesList();
+                    refetchClasses();
+                  } catch (err) {
+                    setSnackbar({ open: true, message: `Failed to apply default schedule: ${(err as Error).message}`, severity: 'error' });
+                  }
+                  setSyncing(null);
+                }} disabled={classesLoading || !!syncing}>
+                  Apply Default Bell Schedule
+                </Button>
+                <Button variant="text" sx={{ ml: 2 }} onClick={() => refetchClassesList()} disabled={classesLoading}>
+                  Refresh Classes
+                </Button>
+              </Box>
 
             <Collapse in={wizardOpen}>
               <Card variant="outlined" sx={{ p: 2, mb: 2 }}>
@@ -1005,6 +1070,45 @@ function SettingsInner() {
 
                 {wizardIndex === 1 && editableClass && (
                   <Box sx={{ mt: 2 }}>
+                    {/* PowerSchool matrix suggestion (opt-in) */}
+                    {psMatrixSuggestions && psMatrixSuggestions[editableClass.id] && (
+                      (() => {
+                        const s = psMatrixSuggestions[editableClass.id] as { days: number[]; startTime?: string; endTime?: string } | undefined;
+                        if (!s) return null;
+                        const labels = s.days.map((d) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(', ');
+                        const times = s.startTime ? ` · ${s.startTime}${s.endTime ? `–${s.endTime}` : ''}` : '';
+                        return (
+                          <Alert severity="info" sx={{ mb: 2 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Box sx={{ mr: 2 }}>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>PowerSchool suggestion</Typography>
+                                <Typography variant="caption" color="text.secondary">{labels}{times}</Typography>
+                              </Box>
+                              <Box>
+                                <Button size="small" onClick={() => {
+                                  const suggestion = psMatrixSuggestions[editableClass.id];
+                                  if (!suggestion) return;
+                                  const daysArr = (suggestion.days || []).slice().sort((a: number, b: number) => a - b);
+                                  // If the matrix included times, set per-day overrides for those days.
+                                  const newDayTimes = { ...(editableClass.dayTimes || {}) } as Record<number, { startTime: string; endTime: string }>;
+                                  if (suggestion.startTime) {
+                                    for (const d of daysArr) {
+                                      newDayTimes[d] = { startTime: suggestion.startTime!, endTime: suggestion.endTime || suggestion.startTime! };
+                                    }
+                                  }
+                                  setEditableClass({ ...editableClass, days: daysArr, dayTimes: Object.keys(newDayTimes).length > 0 ? newDayTimes : undefined });
+                                  setSnackbar({ open: true, message: 'Applied PowerSchool suggestion (not yet saved). Click Save to persist.', severity: 'success' });
+                                }}>Apply suggestion</Button>
+                                <Button size="small" sx={{ ml: 1 }} onClick={() => {
+                                  // Dismiss for this session
+                                  setPsMatrixSuggestions((prev) => { const copy = { ...(prev || {}) }; delete copy[editableClass.id]; return copy; });
+                                }}>Dismiss</Button>
+                              </Box>
+                            </Box>
+                          </Alert>
+                        );
+                      })()
+                    )}
                     <Typography variant="subtitle2">Editing: {editableClass.name}</Typography>
                     <Grid container spacing={1} sx={{ mt: 1 }}>
                       <Grid size={12}>

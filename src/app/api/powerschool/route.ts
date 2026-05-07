@@ -57,6 +57,19 @@ export async function POST(request: NextRequest) {
       `Classes: ${classStats.added} added, ${classStats.updated} updated, ${classStats.removed} removed`,
     );
 
+    // If the scraper produced a matrix-of-days suggestion, map its
+    // scrape-time IDs to the persisted class IDs so the client can show
+    // per-class suggestions (opt-in) rather than applying them
+    // automatically. `matrixByScrapedClassId` keys are the scraper UUIDs;
+    // `classStats.idMap` remaps those to the persisted row UUIDs.
+    const matrixByClassId: Record<string, { days: number[]; startTime?: string; endTime?: string } | undefined> = {};
+    if (result.matrixByScrapedClassId) {
+      for (const [scrapedId, entry] of Object.entries(result.matrixByScrapedClassId)) {
+        const persisted = classStats.idMap.get(scrapedId);
+        if (persisted) matrixByClassId[persisted] = entry;
+      }
+    }
+
     // The scraper assigns a fresh scrape-time UUID to each class, and each
     // assignment's classId points at that scrape-time UUID. But if a class
     // already existed in the sheet, syncClassesFromSource kept the OLD stable
@@ -94,6 +107,10 @@ export async function POST(request: NextRequest) {
       assignmentUpdated: hwStats.updated,
       assignmentRemoved: hwStats.removed,
       log: result.log,
+      // Optional suggestions keyed by the persisted class id (not the
+      // scrape-time id). The client may offer these as an opt-in action in
+      // the Schedule Wizard; the server does NOT apply them automatically.
+      matrixByClassId,
     });
   } catch (error) {
     console.error('POST /api/powerschool error:', error);
