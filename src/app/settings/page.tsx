@@ -1005,27 +1005,69 @@ function SettingsInner() {
                 </Button>
                 <Button variant="outlined" sx={{ ml: 2 }} onClick={async () => {
                   if (!importedClasses || importedClasses.length === 0) return;
-                  if (!confirm('Apply the default bell schedule to all classes? This will set days to Mon–Fri and update start/end times per period.')) return;
+                  if (!confirm('Apply the Lathrop HS default bell schedule to all classes? This will update days and per-day times for each period.')) return;
                   setSyncing('apply-default');
                   try {
-                    // Lathrop HS default bell times (Mon–Fri)
-                    const template: Record<number, { start: string; end: string; days: number[] }> = {
-                      1: { start: '07:30', end: '08:24', days: [1,2,3,4,5] },
-                      2: { start: '08:31', end: '09:25', days: [1,2,3,4,5] },
-                      3: { start: '09:32', end: '10:26', days: [1,2,3,4,5] },
-                      4: { start: '11:04', end: '11:58', days: [1,2,3,4,5] },
-                      5: { start: '12:05', end: '12:59', days: [1,2,3,4,5] },
-                      6: { start: '13:06', end: '14:20', days: [1,2,3,4,5] },
+                    // Week template keyed by weekday (1=Mon..5=Fri) then period -> times
+                    const weekTemplate: Record<number, Record<number, { start: string; end: string }>> = {
+                      1: { // Monday
+                        1: { start: '07:30', end: '08:24' },
+                        2: { start: '08:31', end: '09:25' },
+                        3: { start: '09:32', end: '10:26' },
+                        4: { start: '11:04', end: '11:58' },
+                        5: { start: '12:05', end: '12:59' },
+                        6: { start: '13:06', end: '14:00' },
+                      },
+                      2: { // Tuesday
+                        1: { start: '08:13', end: '09:26' },
+                        2: { start: '09:34', end: '10:47' },
+                        4: { start: '11:26', end: '12:39' },
+                        5: { start: '12:47', end: '14:00' },
+                      },
+                      3: { // Wednesday
+                        2: { start: '08:13', end: '09:26' },
+                        3: { start: '09:34', end: '10:47' },
+                        5: { start: '11:26', end: '12:39' },
+                        6: { start: '12:47', end: '14:00' },
+                      },
+                      4: { // Thursday
+                        1: { start: '08:13', end: '09:26' },
+                        3: { start: '09:34', end: '10:47' },
+                        4: { start: '11:26', end: '12:39' },
+                        6: { start: '12:47', end: '14:00' },
+                      },
+                      5: { // Friday
+                        1: { start: '07:30', end: '08:24' },
+                        2: { start: '08:31', end: '09:25' },
+                        3: { start: '09:32', end: '10:26' },
+                        4: { start: '11:04', end: '11:58' },
+                        5: { start: '12:05', end: '12:59' },
+                        6: { start: '13:06', end: '14:00' },
+                      },
                     };
+
                     const promises: Promise<Response>[] = [];
                     for (const c of importedClasses) {
-                      const slot = template[c.period || 0];
-                      if (!slot) continue;
-                      const updated = { ...c, startTime: slot.start, endTime: slot.end, days: slot.days, dayTimes: c.dayTimes };
+                      const period = Number(c.period || 0);
+                      if (!period || period < 1 || period > 6) continue;
+                      const days: number[] = [];
+                      const dayTimes: Record<number, { startTime: string; endTime: string }> = {};
+                      for (let d = 1; d <= 5; d++) {
+                        const dayMap = weekTemplate[d];
+                        if (dayMap && dayMap[period]) {
+                          days.push(d);
+                          dayTimes[d] = { startTime: dayMap[period].start, endTime: dayMap[period].end };
+                        }
+                      }
+                      if (days.length === 0) continue; // period doesn't meet in this template
+                      // Choose a representative class-level start/end (use first weekday's times)
+                      const firstDay = days[0];
+                      const representative = dayTimes[firstDay];
+                      const updated = { ...c, startTime: representative.startTime, endTime: representative.endTime, days: days.sort((a, b) => a - b), dayTimes } as SchoolClass;
                       promises.push(fetch('/api/classes', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }));
                     }
                     await Promise.all(promises);
-                    setSnackbar({ open: true, message: 'Default bell schedule applied. Review your classes and Save any edits you make.', severity: 'success' });
+                    setSnackbar({ open: true, message: 'Lathrop HS bell schedule applied. Review your classes and Save any edits you make.', severity: 'success' });
                     refetchClassesList();
                     refetchClasses();
                   } catch (err) {

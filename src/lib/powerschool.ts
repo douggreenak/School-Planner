@@ -51,6 +51,25 @@ function defaultBellTime(period: number): { start: string; end: string } {
   };
 }
 
+// Normalize a time string to 24-hour HH:mm. Accepts inputs like "7:30", "7:30 AM",
+// "07:30am" and returns "07:30". Returns undefined when no parseable time is found.
+function normalizeTimeTo24(input?: string | null): string | undefined {
+  if (!input) return undefined;
+  const s = String(input).trim().toLowerCase();
+  const m = s.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+  if (!m) return undefined;
+  let hh = parseInt(m[1], 10);
+  const mm = parseInt(m[2], 10);
+  const ampm = (m[3] || '').toLowerCase();
+  if (ampm === 'pm') {
+    if (hh < 12) hh += 12;
+  } else if (ampm === 'am') {
+    if (hh === 12) hh = 0;
+  }
+  if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return undefined;
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
 // Small delay helper used instead of page.waitForTimeout which may not
 // exist in some puppeteer-core environments. Keep this local and minimal.
 function delay(ms: number): Promise<void> {
@@ -1397,13 +1416,13 @@ export async function scrapePowerSchool(
           const existing = rollup.get(key);
           if (existing) {
             existing.days.add(e.day);
-            if (!existing.startTime && e.startTime) existing.startTime = e.startTime;
-            if (!existing.endTime && e.endTime) existing.endTime = e.endTime;
+            if (!existing.startTime && e.startTime) existing.startTime = normalizeTimeTo24(e.startTime) || e.startTime;
+            if (!existing.endTime && e.endTime) existing.endTime = normalizeTimeTo24(e.endTime) || e.endTime;
           } else {
             rollup.set(key, {
               days: new Set([e.day]),
-              startTime: e.startTime,
-              endTime: e.endTime,
+              startTime: normalizeTimeTo24(e.startTime) || e.startTime,
+              endTime: normalizeTimeTo24(e.endTime) || e.endTime,
             });
           }
         }

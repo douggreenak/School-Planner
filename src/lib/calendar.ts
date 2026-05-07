@@ -45,7 +45,13 @@ export function buildDaySchedule(
     };
   });
 
-  entries.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  // Sort by numeric minutes to avoid locale/string pitfalls and ensure
+  // per-day overrides (dayTimes) are respected when present.
+  const timeToMinutes = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+  };
+  entries.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
 
   return { date, classes: entries, disruption };
 }
