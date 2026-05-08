@@ -48,10 +48,6 @@ import { useClasses } from '@/lib/hooks';
 import type { SchoolClass } from '@/types';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
 
 export default function SettingsPage() {
   return (
@@ -65,12 +61,7 @@ function SettingsInner() {
   const searchParams = useSearchParams();
   const { refetch: refetchClasses } = useClasses();
   const { data: importedClasses, loading: classesLoading, refetch: refetchClassesList } = useClasses();
-  // Lunch quick-create dialog state
-  const [lunchDialogOpen, setLunchDialogOpen] = useState(false);
-  const [lunchLabel, setLunchLabel] = useState('Lunch');
-  const [lunchStart, setLunchStart] = useState('12:00');
-  const [lunchEnd, setLunchEnd] = useState('12:30');
-  const [lunchDays, setLunchDays] = useState<number[]>([1,2,3,4,5]);
+  // (Lunch is managed as a normal class in the Classes page / schedule config)
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'info' });
   const [syncing, setSyncing] = useState<string | null>(null);
 
@@ -1047,7 +1038,7 @@ function SettingsInner() {
                 >
                   Open Schedule Wizard
                 </Button>
-                <Button variant="text" sx={{ ml: 2 }} onClick={() => setLunchDialogOpen(true)} disabled={classesLoading}>Add Lunch</Button>
+                {/* Lunchs are configured via the Classes page now */}
                 <Button variant="outlined" sx={{ ml: 2 }} onClick={async () => {
                   if (!importedClasses || importedClasses.length === 0) return;
                   if (!confirm('Apply the Lathrop HS default bell schedule to all classes? This will update days and per-day times for each period.')) return;
@@ -1388,71 +1379,7 @@ function SettingsInner() {
                     </Box>
                   )}
 
-                {/* Lunch dialog */}
-                <Dialog open={lunchDialogOpen} onClose={() => setLunchDialogOpen(false)} maxWidth="sm" fullWidth>
-                  <DialogTitle>Add Lunch Period</DialogTitle>
-                  <DialogContent>
-                    <Grid container spacing={2} sx={{ mt: 0.5 }}>
-                      <Grid size={12}>
-                        <TextField fullWidth label="Label" value={lunchLabel} onChange={(e) => setLunchLabel(e.target.value)} />
-                      </Grid>
-                      <Grid size={6}>
-                        <TextField label="Start" type="time" size="small" value={lunchStart} onChange={(e) => setLunchStart(e.target.value)} />
-                      </Grid>
-                      <Grid size={6}>
-                        <TextField label="End" type="time" size="small" value={lunchEnd} onChange={(e) => setLunchEnd(e.target.value)} />
-                      </Grid>
-                      <Grid size={12}>
-                        <Typography variant="body2">Days</Typography>
-                        <Box>
-                          {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d, idx) => {
-                            const weekdayNum = (idx + 1) % 7;
-                            return (
-                              <FormControlLabel key={d} control={<Checkbox checked={lunchDays.includes(weekdayNum)} onChange={(e) => {
-                                setLunchDays((prev) => e.target.checked ? Array.from(new Set([...prev, weekdayNum])) : prev.filter(x => x !== weekdayNum));
-                              }} />} label={d} />
-                            );
-                          })}
-                        </Box>
-                      </Grid>
-                    </Grid>
-                  </DialogContent>
-                  <DialogActions sx={{ px: 3, pb: 2 }}>
-                    <Button onClick={() => setLunchDialogOpen(false)}>Cancel</Button>
-                    <Button variant="contained" onClick={async () => {
-                      try {
-                        if (!importedClasses) return;
-                        const promises: Promise<Response>[] = [];
-                        // Create a synthetic SchoolClass entry for lunch for each selected day
-                        // We'll create separate classes per-day so they appear in dayTimes correctly.
-                        for (const d of lunchDays) {
-                          // create a one-off class object; id uses a timestamp to stay unique
-                          const id = `lunch-${d}-${Date.now()}`;
-                          const lunchClass = {
-                            id,
-                            name: lunchLabel,
-                            teacher: '',
-                            room: '',
-                            color: '#888888',
-                            period: 0,
-                            startTime: lunchStart,
-                            endTime: lunchEnd,
-                            days: [d],
-                            semester: semesterStart ? `${semesterStart}–${semesterEnd}` : 'Lunch',
-                          };
-                          promises.push(fetch('/api/classes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(lunchClass) }));
-                        }
-                        await Promise.all(promises);
-                        setSnackbar({ open: true, message: 'Lunch added to schedule', severity: 'success' });
-                        refetchClassesList();
-                        refetchClasses();
-                        setLunchDialogOpen(false);
-                      } catch (err) {
-                        setSnackbar({ open: true, message: `Failed to add lunch: ${(err as Error).message}`, severity: 'error' });
-                      }
-                    }}>Add</Button>
-                  </DialogActions>
-                </Dialog>
+                {/* Lunch is now created/edited via the Classes page — use that to add a Lunch class with per-day overrides (dayTimes). */}
 
               </Card>
             </Collapse>
