@@ -28,8 +28,25 @@ export async function GET(request: NextRequest) {
     const semesterEnd = freshSettings.semesterEnd || '2026-06-15';
     const schoolName = freshSettings.schoolName || 'School';
 
+    // Inject a synthetic Lunch class into the calendar feed so users see
+    // their lunch block even when it's not stored as a persistent class.
+    const lunchClass = {
+      id: '__lunch__',
+      name: 'Lunch',
+      teacher: '',
+      room: '',
+      color: '#9E9E9E',
+      period: 0,
+      startTime: '12:00',
+      endTime: '12:30',
+      days: [1, 2, 3, 4, 5],
+      semester: '',
+      dayTimes: { 1: { startTime: '12:00', endTime: '12:30' }, 2: { startTime: '12:00', endTime: '12:30' }, 3: { startTime: '12:00', endTime: '12:30' }, 4: { startTime: '12:00', endTime: '12:30' }, 5: { startTime: '12:00', endTime: '12:30' } },
+    };
+    const classesWithLunch = classes.find((c) => c.id === '__lunch__') ? classes : [...classes, lunchClass];
+
     const ical = generateCalendarFeed(
-      classes, exams, homework, disruptions,
+      classesWithLunch, exams, homework, disruptions,
       semesterStart, semesterEnd, schoolName
     );
 

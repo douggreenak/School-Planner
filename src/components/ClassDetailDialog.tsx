@@ -255,9 +255,11 @@ export default function ClassDetailDialog({ open, onClose, entry, date, disrupti
       <DialogActions sx={{ px: 3, pb: 2.5 }}>
         <Button onClick={onClose}>Close</Button>
         <Box sx={{ flex: 1 }} />
-        <Button onClick={goToClasses} startIcon={<EditIcon />}>
-          Edit class
-        </Button>
+        {classInfo.id !== '__lunch__' && (
+          <Button onClick={goToClasses} startIcon={<EditIcon />}>
+            Edit class
+          </Button>
+        )}
         {classInfo.source === 'powerschool' && (
           <Button onClick={goToGrades} variant="contained" startIcon={<GradingIcon />}>
             View grades

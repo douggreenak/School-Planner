@@ -1103,7 +1103,10 @@ function SettingsInner() {
                       promises.push(fetch('/api/classes', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }));
                     }
                     await Promise.all(promises);
-                    setSnackbar({ open: true, message: 'Lathrop HS bell schedule applied. Review your classes and Save any edits you make.', severity: 'success' });
+                    // Inform the user the default bell schedule was applied and
+                    // encourage review/adjustment. The changes are already saved
+                    // to the Classes sheet, so there's nothing additional to "Save".
+                    setSnackbar({ open: true, message: 'Lathrop HS bell schedule applied to your Classes. Review and adjust any class times if needed.', severity: 'success' });
                     refetchClassesList();
                     refetchClasses();
                   } catch (err) {

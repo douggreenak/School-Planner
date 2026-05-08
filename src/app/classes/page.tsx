@@ -25,6 +25,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import { useClasses, apiPost, apiPut, apiDelete } from '@/lib/hooks';
 import ClassDialog from '@/components/ClassDialog';
 import type { SchoolClass } from '@/types';
+// (No synthetic lunch button here — Lunch is added to the schedule view only.)
 
 const DAY_NAMES: Record<number, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
 
@@ -85,6 +86,7 @@ export default function ClassesPage() {
           <Fab variant="extended" color="primary" onClick={() => { setEditing(null); setDialogOpen(true); }}>
             <AddIcon sx={{ mr: 1 }} /> Add Class
           </Fab>
+          {/* Lunch is provided in the schedule view as a synthetic class. */}
         </Box>
       )}
 

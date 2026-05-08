@@ -128,15 +128,38 @@ function SchedulePageInner() {
   const [autoTime, setAutoTime] = useState('13:00');
 
   // Build the schedules the views need.
+  // Inject a synthetic "Lunch" class for display only in the Schedule view.
+  const lunchClass = useMemo(() => ({
+    id: '__lunch__',
+    name: 'Lunch',
+    teacher: '',
+    room: '',
+    color: '#9E9E9E',
+    period: 0,
+    startTime: '12:00',
+    endTime: '12:30',
+    days: [1, 2, 3, 4, 5],
+    semester: '',
+    // per-day overrides for Mon–Fri
+    dayTimes: { 1: { startTime: '12:00', endTime: '12:30' }, 2: { startTime: '12:00', endTime: '12:30' }, 3: { startTime: '12:00', endTime: '12:30' }, 4: { startTime: '12:00', endTime: '12:30' }, 5: { startTime: '12:00', endTime: '12:30' } },
+  } as any), []);
+
+  const classesForSchedule = useMemo(() => {
+    const base = classes || [];
+    // Avoid duplicating if a real class happens to have the same id
+    if (base.find((c) => c.id === '__lunch__')) return base;
+    return [...base, lunchClass];
+  }, [classes, lunchClass]);
+
   const daySchedule = useMemo(() => {
-    if (!classes || !disruptions) return null;
-    return buildDaySchedule(selectedDate.format('YYYY-MM-DD'), classes, disruptions);
-  }, [classes, disruptions, selectedDate]);
+    if (!classesForSchedule || !disruptions) return null;
+    return buildDaySchedule(selectedDate.format('YYYY-MM-DD'), classesForSchedule, disruptions);
+  }, [classesForSchedule, disruptions, selectedDate]);
 
   const weekSchedule = useMemo(() => {
-    if (!classes || !disruptions) return null;
-    return getWeekSchedule(selectedDate.format('YYYY-MM-DD'), classes, disruptions);
-  }, [classes, disruptions, selectedDate]);
+    if (!classesForSchedule || !disruptions) return null;
+    return getWeekSchedule(selectedDate.format('YYYY-MM-DD'), classesForSchedule, disruptions);
+  }, [classesForSchedule, disruptions, selectedDate]);
 
   // For the detail dialog we need the disruption that applies to `detailDate`,
   // not the currently-selected date — week-view clicks pick a different day.
@@ -273,22 +296,26 @@ function SchedulePageInner() {
               <Tab label="Year" />
             </Tabs>
             <Box sx={{ p: 2 }}>
-              {!classes || classes.length === 0 ? (
-                <Box sx={{ textAlign: 'center', py: 6 }}>
-                  <CalendarMonthIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 1 }} />
+            <>
+              {/* When the user has not added/imported any persistent classes,
+                  show a helpful call-to-action above the calendar while still
+                  rendering the calendar (which includes the synthetic Lunch).
+               */}
+              {(!classes || classes.length === 0) && (
+                <Box sx={{ textAlign: 'center', py: 2 }}>
                   <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
-                    No classes yet
+                    No classes imported — only Lunch is shown on the schedule
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Add classes from the Classes page or import them from PowerSchool.
+                    Add classes from the Classes page or import them from PowerSchool to populate your full schedule.
                   </Typography>
                   <Stack direction="row" spacing={1} sx={{ justifyContent: 'center' }}>
                     <Button variant="outlined" onClick={() => router.push('/classes')}>Add classes</Button>
                     <Button variant="contained" onClick={() => router.push('/settings')}>Connect PowerSchool</Button>
                   </Stack>
                 </Box>
-              ) : (
-                <>
+              )}
+                
                   {view === 'day' && daySchedule && (
                     <DayView
                       schedule={daySchedule}
@@ -312,7 +339,6 @@ function SchedulePageInner() {
                     />
                   )}
                 </>
-              )}
             </Box>
           </Paper>
         </Box>
