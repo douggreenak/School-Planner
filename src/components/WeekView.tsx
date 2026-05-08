@@ -138,11 +138,7 @@ export default function WeekView({ schedule, weekStart, onClassClick }: Props) {
                   bgcolor: isToday ? alpha(theme.palette.primary.main, 0.04) : 'transparent',
                 }}
               >
-                {/* Hour gridlines (full lines) */}
-                 {HOURS.map((hour) => {
-                   const top = hourTop(hour);
-                   return <Box key={`hr-${hour}`} sx={{ position: 'absolute', top, left: 0, right: 0, borderTop: 1, borderColor: alpha(theme.palette.divider, 0.5), pointerEvents: 'none' }} />;
-                 })}
+                {/* Hour gridlines removed for a cleaner look */}
 
                 {/* Class blocks */}
                 {day.classes.map((entry) => {
@@ -181,9 +177,9 @@ export default function WeekView({ schedule, weekStart, onClassClick }: Props) {
                         right: 2,
                         backgroundColor: entry.cancelled
                           ? theme.palette.action.disabledBackground
-                          : alpha(entry.classInfo.color, 0.16),
+                          : alpha(entry.classInfo.color, 0.14),
                         borderLeft: `3px solid ${entry.cancelled ? theme.palette.action.disabled : entry.classInfo.color}`,
-                        borderRadius: '0 4px 4px 0',
+                        borderRadius: '6px',
                         px: 0.5,
                         py: 0.25,
                         overflow: 'hidden',
@@ -193,7 +189,8 @@ export default function WeekView({ schedule, weekStart, onClassClick }: Props) {
                         '&:hover': clickable ? {
                           backgroundColor: entry.cancelled
                             ? theme.palette.action.disabledBackground
-                            : alpha(entry.classInfo.color, 0.28),
+                            : alpha(entry.classInfo.color, 0.9),
+                          boxShadow: `0 4px 18px ${alpha(theme.palette.common.black, 0.14)}`,
                         } : undefined,
                         '&:focus-visible': clickable ? {
                           outline: `2px solid ${entry.classInfo.color}`,
@@ -202,22 +199,22 @@ export default function WeekView({ schedule, weekStart, onClassClick }: Props) {
                         zIndex: 1,
                       }}
                     >
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          fontWeight: 600,
-                          color: entry.classInfo.color,
-                          fontSize: '0.7rem',
-                          display: 'block',
-                          lineHeight: 1.15,
-                          textDecoration: entry.cancelled ? 'line-through' : 'none',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {entry.classInfo.name}
-                      </Typography>
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            fontWeight: 700,
+                            color: 'text.primary',
+                            fontSize: '0.75rem',
+                            display: 'block',
+                            lineHeight: 1.15,
+                            textDecoration: entry.cancelled ? 'line-through' : 'none',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {entry.classInfo.name}
+                        </Typography>
                         {height >= 36 && (
                           <Typography
                             variant="caption"

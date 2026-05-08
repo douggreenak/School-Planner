@@ -70,61 +70,34 @@ export default function DayView({ schedule, date, onClassClick }: Props) {
   }
 
   return (
-    <Box sx={{ position: 'relative', height: TOTAL_HEIGHT, mt: 1 }}>
-      {/* Hour rows: label on the left, divider line across the right. */}
-      {HOURS.map((hour) => {
-  const top = hourTop(hour);
-        return (
-          <Box key={hour}>
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{
-                position: 'absolute',
-                top,
-                left: 0,
-                width: TIME_GUTTER - 12,
-                pr: 1,
-                textAlign: 'right',
-                transform: 'translateY(-50%)',
-                fontSize: '0.7rem',
-                userSelect: 'none',
-              }}
-            >
-              {formatHour(hour)}
-            </Typography>
-            <Box
-              sx={{
-                position: 'absolute',
-                top,
-                left: TIME_GUTTER,
-                right: 0,
-                borderTop: 1,
-                borderColor: 'divider',
-              }}
-            />
-          </Box>
-        );
-      })}
+      <Box sx={{ position: 'relative', height: TOTAL_HEIGHT, mt: 1 }}>
+        {/* Hour labels on the left. Gridlines removed for a cleaner look. */}
+        {HOURS.map((hour) => {
+          const top = hourTop(hour);
+          return (
+            <Box key={hour}>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{
+                  position: 'absolute',
+                  top,
+                  left: 0,
+                  width: TIME_GUTTER - 12,
+                  pr: 1,
+                  textAlign: 'right',
+                  transform: 'translateY(-50%)',
+                  fontSize: '0.7rem',
+                  userSelect: 'none',
+                }}
+              >
+                {formatHour(hour)}
+              </Typography>
+            </Box>
+          );
+        })}
 
-      {/* Half-hour ticks — faint dashed lines, just enough visual rhythm. */}
-      {HOURS.slice(0, -1).map((hour) => {
-        const top = halfHourTop(hour);
-        return (
-          <Box
-            key={`half-${hour}`}
-            sx={{
-              position: 'absolute',
-              top,
-              left: TIME_GUTTER,
-              right: 0,
-              borderTop: '1px dashed',
-              borderColor: alpha(theme.palette.divider, 0.4),
-              pointerEvents: 'none',
-            }}
-          />
-        );
-      })}
+      {/* Half-hour ticks removed for a cleaner look. */}
 
       {/* Class blocks */}
       {schedule.classes.map((entry) => {
@@ -168,18 +141,18 @@ export default function DayView({ schedule, date, onClassClick }: Props) {
                 ? theme.palette.action.disabledBackground
                 : alpha(entry.classInfo.color, 0.16),
               borderLeft: `4px solid ${entry.cancelled ? theme.palette.action.disabled : entry.classInfo.color}`,
-              borderRadius: '0 8px 8px 0',
+              borderRadius: '8px',
               px: 1.25,
               py: 0.75,
               opacity: entry.cancelled ? 0.65 : 1,
               cursor: clickable ? 'pointer' : 'default',
               transition: 'box-shadow 0.15s, background-color 0.15s',
-              '&:hover': clickable ? {
-                boxShadow: `0 2px 10px ${alpha(theme.palette.common.black, 0.18)}`,
-                backgroundColor: entry.cancelled
-                  ? theme.palette.action.disabledBackground
-                  : alpha(entry.classInfo.color, 0.26),
-              } : undefined,
+                '&:hover': clickable ? {
+                  boxShadow: `0 4px 20px ${alpha(theme.palette.common.black, 0.22)}`,
+                  backgroundColor: entry.cancelled
+                    ? theme.palette.action.disabledBackground
+                    : alpha(entry.classInfo.color, 0.8),
+                } : undefined,
               '&:focus-visible': clickable ? {
                 outline: `2px solid ${entry.classInfo.color}`,
                 outlineOffset: 2,
@@ -194,8 +167,8 @@ export default function DayView({ schedule, date, onClassClick }: Props) {
             <Typography
               variant="body2"
               sx={{
-                fontWeight: 600,
-                color: entry.classInfo.color,
+                fontWeight: 700,
+                color: 'text.primary',
                 textDecoration: entry.cancelled ? 'line-through' : 'none',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -205,7 +178,7 @@ export default function DayView({ schedule, date, onClassClick }: Props) {
             >
               {entry.classInfo.name}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2, fontWeight: 600 }}>
               {formatTime(entry.startTime)} – {formatTime(entry.endTime)}
               {entry.cancelled && ' · Cancelled'}
             </Typography>
