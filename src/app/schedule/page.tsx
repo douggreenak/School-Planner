@@ -333,7 +333,7 @@ function SchedulePageInner() {
                   {view === 'year' && disruptions && (
                     <YearView
                       year={selectedDate.year()}
-                      classes={classes}
+                      classes={classesForSchedule}
                       disruptions={disruptions}
                       onDateClick={(d) => { setSelectedDate(dayjs(d)); setView('day'); }}
                     />
