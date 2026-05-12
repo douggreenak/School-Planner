@@ -124,6 +124,13 @@ function SettingsInner() {
   const [schoolName, setSchoolName] = useState('');
   const [semesterStart, setSemesterStart] = useState('');
   const [semesterEnd, setSemesterEnd] = useState('');
+  const [lunchTimes, setLunchTimes] = useState<Record<number, { startTime: string; endTime: string }>>({
+    1: { startTime: '10:26', endTime: '10:57' },
+    2: { startTime: '10:50', endTime: '11:20' },
+    3: { startTime: '10:50', endTime: '11:20' },
+    4: { startTime: '10:50', endTime: '11:20' },
+    5: { startTime: '10:26', endTime: '10:57' },
+  });
 
   // PowerSchool
   const [psUrl, setPsUrl] = useState('');
@@ -153,6 +160,13 @@ function SettingsInner() {
     }
     if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return undefined;
     return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  };
+
+  const updateLunchTime = (day: number, field: 'startTime' | 'endTime', value: string) => {
+    setLunchTimes((prev) => ({
+      ...prev,
+      [day]: { ...prev[day], [field]: value },
+    }));
   };
 
   // Google Classroom OAuth
@@ -225,6 +239,7 @@ function SettingsInner() {
         if (s.calendarToken) setCalendarToken(s.calendarToken);
         if (s.powerschoolUrl) setPsUrl(s.powerschoolUrl);
         if (s.powerschoolUsername) setPsUser(s.powerschoolUsername);
+        if (s.lunchTimes) setLunchTimes(typeof s.lunchTimes === 'string' ? JSON.parse(s.lunchTimes) : s.lunchTimes);
       })
       .catch(() => {});
   }, []);
@@ -281,9 +296,32 @@ function SettingsInner() {
     setSyncing(null);
   };
 
+  const saveLunchTimes = async () => {
+    setSyncing('lunch');
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'lunchTimes', value: JSON.stringify(lunchTimes) }),
+      });
+      setSnackbar({ open: true, message: 'Lunch times saved!', severity: 'success' });
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to save lunch times', severity: 'error' });
+    }
+    setSyncing(null);
+  };
+
   const saveSchoolSettings = async () => {
     setSyncing('school');
-    const settings = { schoolName, semesterStart, semesterEnd, calendarToken, powerschoolUrl: psUrl, powerschoolUsername: psUser };
+    const settings = { 
+      schoolName, 
+      semesterStart, 
+      semesterEnd, 
+      calendarToken, 
+      powerschoolUrl: psUrl, 
+      powerschoolUsername: psUser,
+      lunchTimes: JSON.stringify(lunchTimes)
+    };
     try {
       for (const [key, value] of Object.entries(settings)) {
         await fetch('/api/settings', {
@@ -1170,6 +1208,52 @@ function SettingsInner() {
                         ))}
                       </Stack>
                     )}
+                    <Divider sx={{ my: 2 }} />
+                    <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 600 }}>Lunch Times</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                      Default times match the Lathrop HS bell schedule. Adjust if needed.
+                    </Typography>
+                    <Grid container spacing={1}>
+                      {([
+                        { label: 'Mon', day: 1 },
+                        { label: 'Tue', day: 2 },
+                        { label: 'Wed', day: 3 },
+                        { label: 'Thu', day: 4 },
+                        { label: 'Fri', day: 5 },
+                      ] as { label: string; day: number }[]).map(({ label, day }) => (
+                        <Grid size={2.4} key={day}>
+                          <Stack spacing={0.5}>
+                            <Typography variant="caption" sx={{ fontWeight: 600, textAlign: 'center' }}>{label}</Typography>
+                            <TextField
+                              size="small"
+                              type="time"
+                              label="Start"
+                              value={lunchTimes[day]?.startTime || ''}
+                              onChange={(e) => updateLunchTime(day, 'startTime', e.target.value)}
+                              slotProps={{ inputLabel: { shrink: true } }}
+                            />
+                            <TextField
+                              size="small"
+                              type="time"
+                              label="End"
+                              value={lunchTimes[day]?.endTime || ''}
+                              onChange={(e) => updateLunchTime(day, 'endTime', e.target.value)}
+                              slotProps={{ inputLabel: { shrink: true } }}
+                            />
+                          </Stack>
+                        </Grid>
+                      ))}
+                    </Grid>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      sx={{ mt: 1.5 }}
+                      onClick={saveLunchTimes}
+                      disabled={!!syncing}
+                      startIcon={syncing === 'lunch' ? <CircularProgress size={14} color="inherit" /> : <CheckCircleIcon />}
+                    >
+                      Save Lunch Times
+                    </Button>
                   </Box>
                 )}
 
@@ -1382,7 +1466,6 @@ function SettingsInner() {
                     </Box>
                   )}
 
-                {/* Lunch is now created/edited via the Classes page — use that to add a Lunch class with per-day overrides (dayTimes). */}
 
               </Card>
             </Collapse>
@@ -1440,7 +1523,7 @@ function SettingsInner() {
                 <TextField fullWidth label="OAuth Client ID" value={classroomClientId} onChange={(e) => setClassroomClientId(e.target.value)} placeholder="...apps.googleusercontent.com" />
               </Grid>
               <Grid size={12}>
-                <TextField fullWidth label="OAuth Client Secret" type="password" value={classroomClientSecret} onChange={(e) => setClassroomClientSecret(e.target.value)} placeholder="GOCSPX-..." />
+                <TextField fullWidth label="OAuth Client Secret" type="password" value={classroomClientSecret} onChange={(e) => setClassroomClientSecret(e.target.value)} />
               </Grid>
               <Grid size={12}>
                 <Stack direction="row" spacing={2}>

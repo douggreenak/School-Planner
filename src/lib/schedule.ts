@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import isoWeek from 'dayjs/plugin/isoWeek';
 import type { SchoolClass, ScheduleDisruption, DaySchedule } from '@/types';
 import { buildDaySchedule } from './calendar';
+import { parseMinutes } from './calendarMetrics';
 
 dayjs.extend(isoWeek);
 
@@ -170,8 +171,7 @@ export function generateLateStartOverrides(
 }
 
 function timeToMinutes(time: string): number {
-  const [h, m] = time.split(':').map(Number);
-  return h * 60 + m;
+  return parseMinutes(time);
 }
 
 function minutesToTime(minutes: number): string {

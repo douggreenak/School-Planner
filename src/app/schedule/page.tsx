@@ -61,6 +61,14 @@ import { v4 as uuid } from 'uuid';
 
 dayjs.extend(isoWeek);
 
+const DEFAULT_LUNCH_TIMES: Record<number, { startTime: string; endTime: string }> = {
+  1: { startTime: '10:26', endTime: '10:57' },
+  2: { startTime: '10:50', endTime: '11:20' },
+  3: { startTime: '10:50', endTime: '11:20' },
+  4: { startTime: '10:50', endTime: '11:20' },
+  5: { startTime: '10:26', endTime: '10:57' },
+};
+
 const DISRUPTION_TYPES: { value: ScheduleDisruption['type']; label: string; color: string }[] = [
   { value: 'early_out', label: 'Early Out', color: '#f9ab00' },
   { value: 'late_start', label: 'Late Start', color: '#1a73e8' },
@@ -121,6 +129,19 @@ function SchedulePageInner() {
   const [detailDate, setDetailDate] = useState<string>('');
 
   // Disruption form state
+  const [lunchTimes, setLunchTimes] = useState<Record<number, { startTime: string; endTime: string }>>(DEFAULT_LUNCH_TIMES);
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((s) => {
+        if (s.lunchTimes) {
+          setLunchTimes(typeof s.lunchTimes === 'string' ? JSON.parse(s.lunchTimes) : s.lunchTimes);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const { data: classes, loading: cLoading } = useClasses();
   const { data: disruptions, loading: dLoading, refetch } = useDisruptions();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -132,20 +153,22 @@ function SchedulePageInner() {
 
   // Build the schedules the views need.
   // Inject a synthetic "Lunch" class for display only in the Schedule view.
-  const lunchClass = useMemo(() => ({
-    id: '__lunch__',
-    name: 'Lunch',
-    teacher: '',
-    room: '',
-    color: '#9E9E9E',
-    period: 0,
-    startTime: '12:00',
-    endTime: '12:30',
-    days: [1, 2, 3, 4, 5],
-    semester: '',
-    // per-day overrides for Mon–Fri
-    dayTimes: { 1: { startTime: '12:00', endTime: '12:30' }, 2: { startTime: '12:00', endTime: '12:30' }, 3: { startTime: '12:00', endTime: '12:30' }, 4: { startTime: '12:00', endTime: '12:30' }, 5: { startTime: '12:00', endTime: '12:30' } },
-  } as any), []);
+  const lunchClass = useMemo(() => {
+    const dt = { ...DEFAULT_LUNCH_TIMES, ...lunchTimes };
+    return {
+      id: '__lunch__',
+      name: 'Lunch',
+      teacher: '',
+      room: '',
+      color: '#9E9E9E',
+      period: 0,
+      startTime: dt[1]?.startTime || '10:26',
+      endTime: dt[1]?.endTime || '10:57',
+      days: [1, 2, 3, 4, 5],
+      semester: '',
+      dayTimes: dt,
+    } as any;
+  }, [lunchTimes]);
 
   const classesForSchedule = useMemo(() => {
     const base = classes || [];

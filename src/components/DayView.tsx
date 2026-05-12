@@ -6,7 +6,7 @@ import dayjs from 'dayjs';
 import type { DaySchedule, ScheduleEntry } from '@/types';
 
 // 7 AM through 7 PM = 13 hour labels, 12 hour intervals.
-import { PX_PER_HOUR, DAY_START_MIN, DAY_END_MIN, TOTAL_HEIGHT, TIME_GUTTER, MIN_BLOCK_HEIGHT, hourTop, halfHourTop, minutesToPixels, heightForMinutes, topForMinutes } from '@/lib/calendarMetrics';
+import { PX_PER_HOUR, DAY_START_MIN, DAY_END_MIN, TOTAL_HEIGHT, TIME_GUTTER, MIN_BLOCK_HEIGHT, hourTop, halfHourTop, minutesToPixels, heightForMinutes, topForMinutes, parseMinutes } from '@/lib/calendarMetrics';
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 7);
 
 function formatHour(h: number): string {
@@ -177,10 +177,8 @@ export default function DayView({ schedule, date, onClassClick }: Props) {
 
   const memoizedClasses = useMemo(() => {
     return schedule.classes.map((entry) => {
-      const [sh, sm] = entry.startTime.split(':').map(Number);
-      const [eh, em] = entry.endTime.split(':').map(Number);
-      const startMin = sh * 60 + sm;
-      const endMin = eh * 60 + em;
+      const startMin = parseMinutes(entry.startTime);
+      const endMin = parseMinutes(entry.endTime);
       return {
         entry,
         top: topForMinutes(startMin),

@@ -11,7 +11,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import { alpha, useTheme } from '@mui/material/styles';
-import { DAY_START_MIN, DAY_END_MIN, TOTAL_HEIGHT, PX_PER_HOUR, TIME_GUTTER, hourTop, halfHourTop, topForMinutes, heightForMinutes } from '@/lib/calendarMetrics';
+import { DAY_START_MIN, DAY_END_MIN, TOTAL_HEIGHT, PX_PER_HOUR, TIME_GUTTER, hourTop, halfHourTop, topForMinutes, heightForMinutes, parseMinutes } from '@/lib/calendarMetrics';
 import dayjs from 'dayjs';
 import type { DaySchedule, ScheduleEntry } from '@/types';
 
@@ -168,10 +168,8 @@ export default function WeekView({ schedule, weekStart, onClassClick }: Props) {
     return schedule.map((day) => ({
       ...day,
       classes: day.classes.map((entry) => {
-        const [sh, sm] = entry.startTime.split(':').map(Number);
-        const [eh, em] = entry.endTime.split(':').map(Number);
-        const startMin = sh * 60 + sm;
-        const endMin = eh * 60 + em;
+        const startMin = parseMinutes(entry.startTime);
+        const endMin = parseMinutes(entry.endTime);
         return {
           entry,
           top: topForMinutes(startMin),

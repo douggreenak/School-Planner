@@ -4,6 +4,7 @@
 import ical, { ICalCalendarMethod } from 'ical-generator';
 import dayjs from 'dayjs';
 import type { SchoolClass, Exam, Homework, ScheduleDisruption, DaySchedule, ScheduleEntry } from '@/types';
+import { parseMinutes } from './calendarMetrics';
 
 /**
  * Build the full day schedule for a given date, accounting for disruptions.
@@ -47,10 +48,7 @@ export function buildDaySchedule(
 
   // Sort by numeric minutes to avoid locale/string pitfalls and ensure
   // per-day overrides (dayTimes) are respected when present.
-  const timeToMinutes = (t: string) => {
-    const [h, m] = t.split(':').map(Number);
-    return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
-  };
+  const timeToMinutes = parseMinutes;
   entries.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
 
   return { date, classes: entries, disruption };
@@ -86,12 +84,12 @@ export function generateCalendarFeed(
     for (const entry of schedule.classes) {
       if (entry.cancelled) continue;
 
-      const [sh, sm] = entry.startTime.split(':').map(Number);
-      const [eh, em] = entry.endTime.split(':').map(Number);
+      const startMin = parseMinutes(entry.startTime);
+      const endMin = parseMinutes(entry.endTime);
 
       cal.createEvent({
-        start: current.hour(sh).minute(sm).second(0).toDate(),
-        end: current.hour(eh).minute(em).second(0).toDate(),
+        start: current.hour(Math.floor(startMin / 60)).minute(startMin % 60).second(0).toDate(),
+        end: current.hour(Math.floor(endMin / 60)).minute(endMin % 60).second(0).toDate(),
         summary: entry.classInfo.name,
         location: `Room ${entry.classInfo.room}`,
         description: `Teacher: ${entry.classInfo.teacher}\nPeriod ${entry.classInfo.period}`,
@@ -114,14 +112,14 @@ export function generateCalendarFeed(
     const endTime = exam.endTime || cls?.endTime || '09:00';
     const location = exam.location || (cls?.room ? `Room ${cls.room}` : '');
 
-    const [sh, sm] = startTime.split(':').map(Number);
-    const [eh, em] = endTime.split(':').map(Number);
+    const sMin = parseMinutes(startTime);
+    const eMin = parseMinutes(endTime);
 
     // No alarm — the user opted out of exam reminders. The event still goes
     // on the calendar; it just won't pop a notification before the exam.
     cal.createEvent({
-      start: examDate.hour(sh).minute(sm).second(0).toDate(),
-      end: examDate.hour(eh).minute(em).second(0).toDate(),
+      start: examDate.hour(Math.floor(sMin / 60)).minute(sMin % 60).second(0).toDate(),
+      end: examDate.hour(Math.floor(eMin / 60)).minute(eMin % 60).second(0).toDate(),
       summary: `EXAM: ${exam.title}`,
       location,
       description: exam.notes,

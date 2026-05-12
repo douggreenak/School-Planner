@@ -95,6 +95,7 @@ export interface AppSettings {
   powerschoolUsername: string;
   classroomEnabled: boolean;
   theme: 'light' | 'dark';
+  lunchTimes?: Record<number, { startTime: string; endTime: string }>;
 }
 
 export interface DaySchedule {

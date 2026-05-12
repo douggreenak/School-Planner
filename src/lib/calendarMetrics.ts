@@ -1,5 +1,23 @@
 // Shared calendar layout constants and helpers to ensure DayView and WeekView
 // compute identical pixel positions for the same times.
+
+/**
+ * Parse a time string in either 24-hour ("07:30") or 12-hour ("7:30 AM")
+ * format into total minutes since midnight. Handles both formats so that
+ * PowerSchool-imported times ("7:30 AM") work alongside manually-entered
+ * 24-hour times ("07:30").
+ */
+export function parseMinutes(time: string): number {
+  if (!time) return 0;
+  const m = time.trim().match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+  if (!m) return 0;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const ap = (m[3] || '').toLowerCase();
+  if (ap === 'pm' && h < 12) h += 12;
+  else if (ap === 'am' && h === 12) h = 0;
+  return h * 60 + min;
+}
 export const PX_PER_HOUR = 64;
 export const DAY_START_MIN = 7 * 60; // 7:00 AM
 export const DAY_END_MIN = 19 * 60; // 7:00 PM

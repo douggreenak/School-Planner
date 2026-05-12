@@ -843,11 +843,18 @@ export async function deleteDisruption(id: string) {
 
 export async function getSettings(): Promise<Partial<AppSettings>> {
   const rows = await getRows('Settings');
-  const settings: Record<string, string> = {};
+  const settings: Record<string, unknown> = {};
   for (const row of rows.slice(1)) {
-    if (row[0]) settings[row[0]] = row[1];
+    if (!row[0]) continue;
+    const key = row[0];
+    const value = row[1];
+    if (key === 'lunchTimes' && value) {
+      try { settings[key] = JSON.parse(value); } catch { settings[key] = value; }
+    } else {
+      settings[key] = value;
+    }
   }
-  return settings as unknown as Partial<AppSettings>;
+  return settings as Partial<AppSettings>;
 }
 
 export async function setSetting(key: string, value: string) {
