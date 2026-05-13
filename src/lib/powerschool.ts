@@ -4,7 +4,7 @@
 // Falls back to multiple selector strategies.
 // ============================================================
 import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
+import chromium from '@sparticuz/chromium-min';
 import { existsSync } from 'fs';
 import type { SchoolClass, Homework } from '@/types';
 import { v4 as uuid } from 'uuid';
@@ -40,10 +40,12 @@ async function launchBrowser() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   }
-  // Serverless environment (Vercel/Lambda) — use bundled Chromium.
+  // Serverless environment (Vercel/Lambda) — download Chromium to /tmp on cold start,
+  // then reuse it on warm invocations. URL must match the installed chromium-min version.
+  const chromiumUrl = 'https://github.com/Sparticuz/chromium/releases/download/v148.0.0/chromium-v148.0.0-pack.tar';
   return puppeteer.launch({
     headless: true,
-    executablePath: await chromium.executablePath(),
+    executablePath: await chromium.executablePath(chromiumUrl),
     args: chromium.args,
   });
 }
