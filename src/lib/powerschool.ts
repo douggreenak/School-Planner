@@ -42,7 +42,7 @@ async function launchBrowser() {
   }
   // Serverless environment (Vercel/Lambda) — download Chromium to /tmp on cold start,
   // then reuse it on warm invocations. URL must match the installed chromium-min version.
-  const chromiumUrl = 'https://github.com/Sparticuz/chromium/releases/download/v148.0.0/chromium-v148.0.0-pack.tar';
+  const chromiumUrl = 'https://github.com/Sparticuz/chromium/releases/download/v148.0.0/chromium-v148.0.0-pack.x64.tar';
   return puppeteer.launch({
     headless: true,
     executablePath: await chromium.executablePath(chromiumUrl),
