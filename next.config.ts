@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['puppeteer-core'],
+  serverExternalPackages: ['puppeteer-core', '@sparticuz/chromium'],
   // Allow access from any local network device during development
   // (your phone, another laptop, etc. on the same WiFi)
   allowedDevOrigins: [

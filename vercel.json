@@ -1,0 +1,12 @@
+{
+  "functions": {
+    "src/app/api/powerschool/**": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "src/app/api/powerschool/migrate/**": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  }
+}

@@ -4,17 +4,48 @@
 // Falls back to multiple selector strategies.
 // ============================================================
 import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
+import { existsSync } from 'fs';
 import type { SchoolClass, Homework } from '@/types';
 import { v4 as uuid } from 'uuid';
 
-function findChromePath(): string {
-  if (process.platform === 'darwin') {
-    return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const LOCAL_CHROME_PATHS: string[] = process.platform === 'darwin'
+  ? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome']
+  : process.platform === 'win32'
+  ? [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    ]
+  : [
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/snap/bin/chromium',
+    ];
+
+function findLocalChrome(): string | null {
+  for (const p of LOCAL_CHROME_PATHS) {
+    if (existsSync(p)) return p;
   }
-  if (process.platform === 'win32') {
-    return 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+  return null;
+}
+
+async function launchBrowser() {
+  const localChrome = findLocalChrome();
+  if (localChrome) {
+    return puppeteer.launch({
+      headless: true,
+      executablePath: localChrome,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    });
   }
-  return '/usr/bin/google-chrome';
+  // Serverless environment (Vercel/Lambda) — use bundled Chromium.
+  return puppeteer.launch({
+    headless: true,
+    executablePath: await chromium.executablePath(),
+    args: chromium.args,
+  });
 }
 
 interface PowerSchoolCredentials {
@@ -244,11 +275,7 @@ export async function scrapePowerSchool(
   // e.g. "https://premier.k12northstar.org/guardian/home.html" → "https://premier.k12northstar.org"
   const baseUrl = new URL(creds.url).origin;
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    executablePath: findChromePath(),
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-  });
+  const browser = await launchBrowser();
 
   try {
     const page = await browser.newPage();
