@@ -1,11 +1,17 @@
 import { NextRequest } from 'next/server';
-import { getConfig, writeConfigFile, isConfigured } from '@/lib/config';
+import { getConfigFromRequest, writeConfigFile, isConfiguredFromRequest, buildConfigCookieHeader } from '@/lib/config';
 import { encrypt, decrypt } from '@/lib/crypto';
 import { google } from 'googleapis';
 
-export async function GET() {
-  const { configured, missing } = isConfigured();
-  const cfg = getConfig();
+function withCookie(data: unknown, cookieHeader: string): Response {
+  return new Response(JSON.stringify(data), {
+    headers: { 'Content-Type': 'application/json', 'Set-Cookie': cookieHeader },
+  });
+}
+
+export async function GET(request: Request) {
+  const { configured, missing } = isConfiguredFromRequest(request);
+  const cfg = getConfigFromRequest(request);
   return Response.json({
     configured,
     missing,
@@ -155,13 +161,10 @@ export async function POST(request: NextRequest) {
         if (migrated.length > 0) messageParts.push(`migrated headers: ${migrated.join(', ')}`);
         if (created.length === 0 && migrated.length === 0) messageParts.push('all tabs ready');
 
-        return Response.json({
-          success: true,
-          spreadsheetTitle: title,
-          tabsCreated: created,
-          tabsMigrated: migrated,
-          message: messageParts.join(' — '),
-        });
+        return withCookie(
+          { success: true, spreadsheetTitle: title, tabsCreated: created, tabsMigrated: migrated, message: messageParts.join(' — ') },
+          buildConfigCookieHeader(getConfigFromRequest(request)),
+        );
       } catch (err) {
         const msg = (err as Error).message;
         let hint = '';
@@ -172,11 +175,7 @@ export async function POST(request: NextRequest) {
         } else if (msg.includes('PERMISSION_DENIED')) {
           hint = 'The service account does not have permission. Share your Google Sheet with the service account email as an Editor.';
         }
-        return Response.json({
-          success: false,
-          error: msg,
-          hint: hint || 'Credentials were saved but the connection test failed. Double-check each value.',
-        });
+        return Response.json({ success: false, error: msg, hint: hint || 'Credentials were saved but the connection test failed. Double-check each value.' });
       }
     }
 
@@ -186,37 +185,26 @@ export async function POST(request: NextRequest) {
       if (!url || !username || !password) {
         return Response.json({ success: false, error: 'URL, username, and password are all required.' });
       }
-      writeConfigFile({
-        powerschoolUrl: url,
-        powerschoolUsername: username,
-        powerschoolPassword: password,
-      });
-      return Response.json({ success: true });
+      writeConfigFile({ powerschoolUrl: url, powerschoolUsername: username, powerschoolPassword: password });
+      return withCookie({ success: true }, buildConfigCookieHeader(getConfigFromRequest(request)));
     }
 
     // ====== Clear saved PowerSchool credentials ======
     if (action === 'clear-powerschool') {
-      writeConfigFile({
-        powerschoolUrl: '',
-        powerschoolUsername: '',
-        powerschoolPassword: '',
-      });
-      return Response.json({ success: true });
+      writeConfigFile({ powerschoolUrl: '', powerschoolUsername: '', powerschoolPassword: '' });
+      return withCookie({ success: true }, buildConfigCookieHeader(getConfigFromRequest(request)));
     }
 
     // ====== Save Classroom OAuth ======
     if (action === 'save-classroom-oauth') {
       const { clientId, clientSecret } = body;
-      writeConfigFile({
-        googleClientId: clientId,
-        googleClientSecret: clientSecret,
-      });
-      return Response.json({ success: true });
+      writeConfigFile({ googleClientId: clientId, googleClientSecret: clientSecret });
+      return withCookie({ success: true }, buildConfigCookieHeader(getConfigFromRequest(request)));
     }
 
     // ====== Test connection (standalone, for re-checking) ======
     if (action === 'test-connection') {
-      const cfg = getConfig();
+      const cfg = getConfigFromRequest(request);
       if (!cfg.googleServiceAccountEmail || !cfg.googlePrivateKey || !cfg.googleSpreadsheetId) {
         return Response.json({ success: false, error: 'Missing credentials. Save them first.' });
       }
@@ -241,7 +229,7 @@ export async function POST(request: NextRequest) {
 
     // ====== Export all non-spreadsheet config as plain JSON ======
     if (action === 'export-config') {
-      const cfg = getConfig();
+      const cfg = getConfigFromRequest(request);
       if (!cfg.googleServiceAccountEmail || !cfg.googlePrivateKey || !cfg.googleSpreadsheetId) {
         return Response.json({ success: false, error: 'No credentials saved yet. Set up Google Sheets first.' });
       }
@@ -295,13 +283,12 @@ export async function POST(request: NextRequest) {
         if (created.length > 0) messageParts.push(`created tabs: ${created.join(', ')}`);
         if (migrated.length > 0) messageParts.push(`migrated headers: ${migrated.join(', ')}`);
         if (created.length === 0 && migrated.length === 0) messageParts.push('all tabs ready');
-        return Response.json({ success: true, spreadsheetTitle: title, message: messageParts.join(' — ') });
+        return withCookie(
+          { success: true, spreadsheetTitle: title, message: messageParts.join(' — ') },
+          buildConfigCookieHeader(getConfigFromRequest(request)),
+        );
       } catch (err) {
-        return Response.json({
-          success: false,
-          error: (err as Error).message,
-          hint: 'Credentials were applied but the connection test failed. Check that the service account still has access to the spreadsheet.',
-        });
+        return Response.json({ success: false, error: (err as Error).message, hint: 'Credentials were applied but the connection test failed. Check that the service account still has access to the spreadsheet.' });
       }
     }
 
@@ -311,7 +298,7 @@ export async function POST(request: NextRequest) {
       if (!passphrase || passphrase.length < 4) {
         return Response.json({ success: false, error: 'Passphrase must be at least 4 characters.' });
       }
-      const cfg = getConfig();
+      const cfg = getConfigFromRequest(request);
       if (!cfg.googleServiceAccountEmail || !cfg.googlePrivateKey || !cfg.googleSpreadsheetId) {
         return Response.json({ success: false, error: 'No credentials saved yet. Set up Google Sheets first.' });
       }
@@ -391,21 +378,12 @@ export async function POST(request: NextRequest) {
         if (migrated.length > 0) messageParts.push(`migrated headers: ${migrated.join(', ')}`);
         if (created.length === 0 && migrated.length === 0) messageParts.push('all tabs ready');
 
-        return Response.json({
-          success: true,
-          spreadsheetTitle: title,
-          tabsCreated: created,
-          tabsMigrated: migrated,
-          hasClassroomOAuth: !!payload.ci,
-          hasPowerschool: !!payload.pp,
-          message: messageParts.join(' — '),
-        });
+        return withCookie(
+          { success: true, spreadsheetTitle: title, tabsCreated: created, tabsMigrated: migrated, hasClassroomOAuth: !!payload.ci, hasPowerschool: !!payload.pp, message: messageParts.join(' — ') },
+          buildConfigCookieHeader(getConfigFromRequest(request)),
+        );
       } catch (err) {
-        return Response.json({
-          success: false,
-          error: (err as Error).message,
-          hint: 'Credentials were restored from the setup code but the connection test failed. The service account may need access to this spreadsheet again.',
-        });
+        return Response.json({ success: false, error: (err as Error).message, hint: 'Credentials were restored from the setup code but the connection test failed. The service account may need access to this spreadsheet again.' });
       }
     }
 

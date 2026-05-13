@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { scrapePowerSchool, type ScrapedSchedule } from '@/lib/powerschool';
 import { syncClassesFromSource, syncHomeworkFromSource } from '@/lib/sheets';
-import { getConfig, writeConfigFile } from '@/lib/config';
+import { getConfigFromRequest, writeConfigFile } from '@/lib/config';
 
 export async function POST(request: NextRequest) {
   // Hoisted so the catch block can still surface the scrape log even if the
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
   let result: ScrapedSchedule | null = null;
   try {
     const body = await request.json().catch(() => ({}));
-    const cfg = getConfig();
+    const cfg = getConfigFromRequest(request);
 
     // Credentials can come from the request body (for the very first import)
     // or from server-side config (everything afterward). Body wins so users

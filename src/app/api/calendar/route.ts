@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getClasses, getExams, getHomework, getDisruptions, getSettings } from '@/lib/sheets';
-import { getConfig } from '@/lib/config';
+import { getConfigFromRequest } from '@/lib/config';
 import { generateCalendarFeed } from '@/lib/calendar';
 
 export async function GET(request: NextRequest) {
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const token = searchParams.get('token');
 
     // Validate token against config file AND settings sheet
-    const cfg = getConfig();
+    const cfg = getConfigFromRequest(request);
     let savedSettings = await getSettings();
     const validToken = cfg.calendarSecretToken || savedSettings.calendarToken;
     if (validToken && token !== validToken) {

@@ -1,10 +1,9 @@
-import { NextRequest } from 'next/server';
 import { getSettings, setSetting, initializeSpreadsheet } from '@/lib/sheets';
-import { isConfigured } from '@/lib/config';
+import { isConfiguredFromRequest } from '@/lib/config';
 
-export async function GET() {
+export async function GET(request: Request) {
   // Check if sheets are configured at all
-  const { configured } = isConfigured();
+  const { configured } = isConfiguredFromRequest(request);
   if (!configured) {
     return Response.json({});
   }
@@ -18,7 +17,7 @@ export async function GET() {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const { key, value } = await request.json();
     if (!key) return Response.json({ error: 'Missing key' }, { status: 400 });
@@ -30,7 +29,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function PUT(request: NextRequest) {
+export async function PUT(request: Request) {
   try {
     const { action } = await request.json();
     if (action === 'initialize') {

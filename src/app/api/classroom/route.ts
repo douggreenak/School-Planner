@@ -1,9 +1,9 @@
-import { getConfig } from '@/lib/config';
+import { getConfigFromRequest } from '@/lib/config';
 import { getAuthUrl } from '@/lib/classroom';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const cfg = getConfig();
+    const cfg = getConfigFromRequest(request);
     if (!cfg.googleClientId || !cfg.googleClientSecret) {
       return Response.json({
         error: 'Google Classroom is not configured. Go to Settings and add your OAuth Client ID and Client Secret under the Google Classroom section.',

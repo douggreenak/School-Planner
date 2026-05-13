@@ -5,7 +5,7 @@
 // credentials are PRESENT in config. This endpoint actually makes a
 // sheets.spreadsheets.get call and reports the result.
 // ============================================================
-import { getConfig } from '@/lib/config';
+import { getConfigFromRequest } from '@/lib/config';
 import { google } from 'googleapis';
 
 // Lightweight in-memory cache so repeated polling doesn't hammer the Sheets API.
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     }
   }
 
-  const cfg = getConfig();
+  const cfg = getConfigFromRequest(request);
   if (!cfg.googleServiceAccountEmail || !cfg.googlePrivateKey || !cfg.googleSpreadsheetId) {
     cache = { at: Date.now(), ok: false, error: 'Missing credentials' };
     return Response.json({ ...bodyFor(cache), cached: false });
