@@ -3,11 +3,18 @@
 // Reads from a local config.json file AND env vars.
 // The web UI can write credentials here so the user never
 // has to edit .env.local by hand.
+//
+// In read-only serverless environments (Vercel, Lambda) the
+// primary config.json path is not writable. In that case we
+// fall back to /tmp which IS writable, though ephemeral between
+// cold starts. An in-memory cache handles repeated reads within
+// the same function instance regardless of where the file lives.
 // ============================================================
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 const CONFIG_PATH = join(process.cwd(), 'config.json');
+const TMP_CONFIG_PATH = '/tmp/school-planner-config.json';
 
 export interface ServerConfig {
   googleServiceAccountEmail?: string;
@@ -22,13 +29,22 @@ export interface ServerConfig {
   powerschoolPassword?: string;
 }
 
+// In-memory cache — survives repeated calls within one function instance.
+let memoryConfig: ServerConfig | null = null;
+
 function readConfigFile(): ServerConfig {
-  try {
-    if (existsSync(CONFIG_PATH)) {
-      return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
+  if (memoryConfig) return memoryConfig;
+
+  for (const path of [CONFIG_PATH, TMP_CONFIG_PATH]) {
+    try {
+      if (existsSync(path)) {
+        const parsed = JSON.parse(readFileSync(path, 'utf-8')) as ServerConfig;
+        memoryConfig = parsed;
+        return parsed;
+      }
+    } catch {
+      // ignore parse / permission errors and try next
     }
-  } catch {
-    // ignore parse errors
   }
   return {};
 }
@@ -36,7 +52,18 @@ function readConfigFile(): ServerConfig {
 export function writeConfigFile(updates: Partial<ServerConfig>) {
   const current = readConfigFile();
   const merged = { ...current, ...updates };
-  writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf-8');
+  memoryConfig = merged;
+
+  // Try the primary location first (works locally and in writable containers).
+  try {
+    writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf-8');
+    return;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'EROFS') throw e;
+  }
+
+  // Read-only filesystem (serverless) — write to /tmp instead.
+  writeFileSync(TMP_CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf-8');
 }
 
 /**
