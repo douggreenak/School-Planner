@@ -239,7 +239,73 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ====== Generate a portable Setup Code ======
+    // ====== Export all non-spreadsheet config as plain JSON ======
+    if (action === 'export-config') {
+      const cfg = getConfig();
+      if (!cfg.googleServiceAccountEmail || !cfg.googlePrivateKey || !cfg.googleSpreadsheetId) {
+        return Response.json({ success: false, error: 'No credentials saved yet. Set up Google Sheets first.' });
+      }
+      const exportData: Record<string, string> = {
+        v: '1',
+        serviceAccountEmail: cfg.googleServiceAccountEmail,
+        privateKey: cfg.googlePrivateKey,
+        spreadsheetId: cfg.googleSpreadsheetId,
+      };
+      if (cfg.googleClientId) exportData.classroomClientId = cfg.googleClientId;
+      if (cfg.googleClientSecret) exportData.classroomClientSecret = cfg.googleClientSecret;
+      if (cfg.powerschoolUrl) exportData.powerschoolUrl = cfg.powerschoolUrl;
+      if (cfg.powerschoolUsername) exportData.powerschoolUsername = cfg.powerschoolUsername;
+      if (cfg.powerschoolPassword) exportData.powerschoolPassword = cfg.powerschoolPassword;
+      return Response.json({ success: true, config: exportData });
+    }
+
+    // ====== Import all non-spreadsheet config from plain JSON ======
+    if (action === 'import-config') {
+      const { config } = body as { config: Record<string, string> };
+      if (!config || !config.serviceAccountEmail || !config.privateKey || !config.spreadsheetId) {
+        return Response.json({ success: false, error: 'Config JSON is missing required fields (serviceAccountEmail, privateKey, spreadsheetId).' });
+      }
+
+      const configUpdate: Record<string, string> = {
+        googleServiceAccountEmail: config.serviceAccountEmail,
+        googlePrivateKey: config.privateKey,
+        googleSpreadsheetId: config.spreadsheetId,
+      };
+      if (config.classroomClientId) configUpdate.googleClientId = config.classroomClientId;
+      if (config.classroomClientSecret) configUpdate.googleClientSecret = config.classroomClientSecret;
+      if (config.powerschoolUrl) configUpdate.powerschoolUrl = config.powerschoolUrl;
+      if (config.powerschoolUsername) configUpdate.powerschoolUsername = config.powerschoolUsername;
+      if (config.powerschoolPassword) configUpdate.powerschoolPassword = config.powerschoolPassword;
+      writeConfigFile(configUpdate);
+
+      // Test connection + auto-initialize sheets
+      try {
+        const auth = new google.auth.GoogleAuth({
+          credentials: {
+            client_email: config.serviceAccountEmail,
+            private_key: config.privateKey.replace(/\\n/g, '\n'),
+          },
+          scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+        });
+        const sheets = google.sheets({ version: 'v4', auth });
+        const res = await sheets.spreadsheets.get({ spreadsheetId: config.spreadsheetId });
+        const title = res.data.properties?.title || 'Untitled';
+        const { created, migrated } = await initializeSheetTabs(sheets, config.spreadsheetId);
+        const messageParts = [`Connected to "${title}"`];
+        if (created.length > 0) messageParts.push(`created tabs: ${created.join(', ')}`);
+        if (migrated.length > 0) messageParts.push(`migrated headers: ${migrated.join(', ')}`);
+        if (created.length === 0 && migrated.length === 0) messageParts.push('all tabs ready');
+        return Response.json({ success: true, spreadsheetTitle: title, message: messageParts.join(' — ') });
+      } catch (err) {
+        return Response.json({
+          success: false,
+          error: (err as Error).message,
+          hint: 'Credentials were applied but the connection test failed. Check that the service account still has access to the spreadsheet.',
+        });
+      }
+    }
+
+    // ====== Generate a portable Setup Code (legacy encrypted method) ======
     if (action === 'generate-setup-code') {
       const { passphrase } = body;
       if (!passphrase || passphrase.length < 4) {
@@ -268,7 +334,7 @@ export async function POST(request: NextRequest) {
       return Response.json({ success: true, setupCode: `SP1-${code}` });
     }
 
-    // ====== Restore credentials from a Setup Code ======
+    // ====== Restore credentials from a Setup Code (legacy encrypted method) ======
     if (action === 'use-setup-code') {
       const { setupCode, passphrase } = body;
       if (!setupCode || !passphrase) {

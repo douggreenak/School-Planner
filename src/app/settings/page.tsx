@@ -41,7 +41,6 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import KeyIcon from '@mui/icons-material/Key';
 import LinkIcon from '@mui/icons-material/Link';
-import QrCodeIcon from '@mui/icons-material/QrCode';
 import DevicesIcon from '@mui/icons-material/Devices';
 import LockIcon from '@mui/icons-material/Lock';
 import { useClasses } from '@/lib/hooks';
@@ -177,13 +176,9 @@ function SettingsInner() {
   const [calendarToken, setCalendarToken] = useState('');
   const [calendarUrl, setCalendarUrl] = useState('');
 
-  // Setup Code (quick setup for new devices)
-  const [setupCode, setSetupCode] = useState('');
-  const [setupPassphrase, setSetupPassphrase] = useState('');
-  const [showPassphrase, setShowPassphrase] = useState(false);
-  const [generatedCode, setGeneratedCode] = useState('');
-  const [generatePassphrase, setGeneratePassphrase] = useState('');
-  const [showGeneratePassphrase, setShowGeneratePassphrase] = useState(false);
+  // Quick Setup (copy/paste JSON config between devices)
+  const [pastedConfig, setPastedConfig] = useState('');
+  const [showConfig, setShowConfig] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardIndex, setWizardIndex] = useState(0);
   const [editableClass, setEditableClass] = useState<SchoolClass | null>(null);
@@ -507,60 +502,60 @@ function SettingsInner() {
     setSnackbar({ open: true, message: 'Calendar URL copied to clipboard!', severity: 'success' });
   };
 
-  const useSetupCode = async () => {
-    setSyncing('setup-code');
+  const applyPastedConfig = async () => {
+    setSyncing('import-config');
+    let parsed: Record<string, string>;
+    try {
+      parsed = JSON.parse(pastedConfig.trim());
+    } catch {
+      setSnackbar({ open: true, message: 'Invalid JSON — check the pasted text and try again.', severity: 'error' });
+      setSyncing(null);
+      return;
+    }
     try {
       const res = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'use-setup-code', setupCode, passphrase: setupPassphrase }),
+        body: JSON.stringify({ action: 'import-config', config: parsed }),
       });
       const data = await res.json();
       if (data.success) {
         setConnectionTest({ tested: true, success: true, spreadsheetTitle: data.spreadsheetTitle });
         setSheetsInitialized(true);
-        setSnackbar({ open: true, message: data.message || 'Connected! All credentials restored from setup code.', severity: 'success' });
-        // Refresh setup status
+        setSnackbar({ open: true, message: data.message || 'Connected! All credentials applied from config.', severity: 'success' });
         const status = await fetch('/api/setup').then((r) => r.json());
         setSetupStatus(status);
         if (status.serviceAccountEmail) setServiceEmail(status.serviceAccountEmail);
         if (status.spreadsheetId) setSpreadsheetId(status.spreadsheetId);
-        // Clear sensitive inputs
-        setSetupCode('');
-        setSetupPassphrase('');
+        setPastedConfig('');
       } else {
-        setSnackbar({ open: true, message: data.hint || data.error || 'Failed to restore from setup code.', severity: 'error' });
+        setSnackbar({ open: true, message: data.hint || data.error || 'Failed to apply config.', severity: 'error' });
       }
     } catch {
-      setSnackbar({ open: true, message: 'Network error while restoring setup code.', severity: 'error' });
+      setSnackbar({ open: true, message: 'Network error while applying config.', severity: 'error' });
     }
     setSyncing(null);
   };
 
-  const generateSetupCode = async () => {
-    setSyncing('generate-code');
+  const copyConfigToClipboard = async () => {
+    setSyncing('export-config');
     try {
       const res = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'generate-setup-code', passphrase: generatePassphrase }),
+        body: JSON.stringify({ action: 'export-config' }),
       });
       const data = await res.json();
       if (data.success) {
-        setGeneratedCode(data.setupCode);
-        setSnackbar({ open: true, message: 'Setup code generated! Copy it and save it somewhere safe.', severity: 'success' });
+        navigator.clipboard.writeText(JSON.stringify(data.config, null, 2));
+        setSnackbar({ open: true, message: 'Config copied to clipboard! Paste it on your other device.', severity: 'success' });
       } else {
-        setSnackbar({ open: true, message: data.error || 'Failed to generate setup code.', severity: 'error' });
+        setSnackbar({ open: true, message: data.error || 'Failed to export config.', severity: 'error' });
       }
     } catch {
       setSnackbar({ open: true, message: 'Network error.', severity: 'error' });
     }
     setSyncing(null);
-  };
-
-  const copySetupCode = () => {
-    navigator.clipboard.writeText(generatedCode);
-    setSnackbar({ open: true, message: 'Setup code copied to clipboard!', severity: 'success' });
   };
 
   // ---- Render ----
@@ -625,9 +620,8 @@ function SettingsInner() {
 
       <Stack spacing={3}>
 
-        {/* ===== QUICK SETUP (shown when NOT yet connected) ===== */}
-        {!isConnected && (
-          <Card sx={(theme) => ({
+        {/* ===== QUICK SETUP ===== */}
+        <Card sx={(theme) => ({
             border: '2px solid',
             borderColor: 'primary.main',
             background: theme.palette.mode === 'light'
@@ -641,52 +635,51 @@ function SettingsInner() {
                 <Chip label="Fastest" size="small" color="primary" />
               </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Already set up on another device? Paste your <strong>Setup Code</strong> and enter the passphrase to connect instantly — no need to re-enter credentials.
+                Copy your config from this device to set up another one instantly, or paste a config from another device to connect here without re-entering credentials.
               </Typography>
               <Grid container spacing={2}>
                 <Grid size={12}>
-                  <TextField
-                    fullWidth
-                    label="Setup Code"
-                    value={setupCode}
-                    onChange={(e) => setSetupCode(e.target.value.trim())}
-                    placeholder="SP1-..."
-                    multiline
-                    rows={2}
-                    helperText="The setup code generated on your other device"
-                  />
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                    <TextField
+                      sx={{ flex: 1, minWidth: 0 }}
+                      label="Config JSON"
+                      value={pastedConfig}
+                      onChange={(e) => setPastedConfig(e.target.value)}
+                      placeholder={showConfig ? '{\n  "serviceAccountEmail": "...",\n  "privateKey": "...",\n  "spreadsheetId": "..."\n}' : ''}
+                      multiline={showConfig}
+                      rows={showConfig ? 5 : 1}
+                      type={showConfig ? 'text' : 'password'}
+                      slotProps={{ input: { sx: { fontFamily: 'monospace', fontSize: '0.8rem' } } }}
+                      helperText="Paste a config from another device, or copy this device's config to transfer it"
+                    />
+                    <Tooltip title={showConfig ? 'Hide' : 'Show'}>
+                      <IconButton onClick={() => setShowConfig((v) => !v)} sx={{ mt: 1 }}>
+                        {showConfig ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
                 </Grid>
                 <Grid size={12}>
-                  <TextField
-                    fullWidth
-                    label="Passphrase"
-                    type={showPassphrase ? 'text' : 'password'}
-                    value={setupPassphrase}
-                    onChange={(e) => setSetupPassphrase(e.target.value)}
-                    placeholder="The passphrase you chose when generating the code"
-                    slotProps={{
-                      input: {
-                        endAdornment: (
-                          <InputAdornment position="end">
-                            <IconButton onClick={() => setShowPassphrase(!showPassphrase)} edge="end" size="small">
-                              {showPassphrase ? <VisibilityOff /> : <Visibility />}
-                            </IconButton>
-                          </InputAdornment>
-                        ),
-                      },
-                    }}
-                  />
-                </Grid>
-                <Grid size={12}>
-                  <Button
-                    variant="contained"
-                    size="large"
-                    startIcon={syncing === 'setup-code' ? <CircularProgress size={18} color="inherit" /> : <LockIcon />}
-                    onClick={useSetupCode}
-                    disabled={!setupCode || !setupPassphrase || !!syncing}
-                  >
-                    Connect with Setup Code
-                  </Button>
+                  <Stack direction="row" spacing={1.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                    <Button
+                      variant="contained"
+                      size="large"
+                      startIcon={syncing === 'import-config' ? <CircularProgress size={18} color="inherit" /> : <LockIcon />}
+                      onClick={applyPastedConfig}
+                      disabled={!pastedConfig.trim() || !!syncing}
+                    >
+                      Apply Config &amp; Connect
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      size="large"
+                      startIcon={syncing === 'export-config' ? <CircularProgress size={18} /> : <ContentCopyIcon />}
+                      onClick={copyConfigToClipboard}
+                      disabled={!!syncing}
+                    >
+                      Copy Config
+                    </Button>
+                  </Stack>
                 </Grid>
               </Grid>
               <Divider sx={{ my: 2 }} />
@@ -695,7 +688,6 @@ function SettingsInner() {
               </Typography>
             </CardContent>
           </Card>
-        )}
 
         {/* ===== STEP 1: GOOGLE SHEETS CONNECTION ===== */}
         <Card sx={{ border: '2px solid', borderColor: isConnected ? 'success.main' : setupStatus?.configured ? 'warning.main' : 'primary.main' }}>
@@ -860,76 +852,6 @@ function SettingsInner() {
               </Step>
             </Stepper>
 
-            {/* Generate Setup Code — shown after successful connection */}
-            {isConnected && (
-              <>
-                <Divider sx={{ my: 3 }} />
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <DevicesIcon sx={{ color: 'primary.main' }} />
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                    Set up another device?
-                  </Typography>
-                </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Generate a <strong>Setup Code</strong> to instantly connect another device — no need to re-enter service account keys or spreadsheet IDs. The code is encrypted with a passphrase you choose.
-                </Typography>
-                <Grid container spacing={2}>
-                  <Grid size={8}>
-                    <TextField
-                      fullWidth
-                      label="Choose a passphrase"
-                      type={showGeneratePassphrase ? 'text' : 'password'}
-                      value={generatePassphrase}
-                      onChange={(e) => setGeneratePassphrase(e.target.value)}
-                      placeholder="Something you'll remember"
-                      helperText="You'll need this passphrase on the other device"
-                      slotProps={{
-                        input: {
-                          endAdornment: (
-                            <InputAdornment position="end">
-                              <IconButton onClick={() => setShowGeneratePassphrase(!showGeneratePassphrase)} edge="end" size="small">
-                                {showGeneratePassphrase ? <VisibilityOff /> : <Visibility />}
-                              </IconButton>
-                            </InputAdornment>
-                          ),
-                        },
-                      }}
-                    />
-                  </Grid>
-                  <Grid size={4} sx={{ display: 'flex', alignItems: 'flex-start', pt: 1 }}>
-                    <Button
-                      variant="outlined"
-                      fullWidth
-                      startIcon={syncing === 'generate-code' ? <CircularProgress size={16} /> : <QrCodeIcon />}
-                      onClick={generateSetupCode}
-                      disabled={!generatePassphrase || generatePassphrase.length < 4 || !!syncing}
-                    >
-                      Generate Code
-                    </Button>
-                  </Grid>
-                  {generatedCode && (
-                    <Grid size={12}>
-                      <Alert severity="success" sx={{ mb: 1 }}>
-                        Setup code generated! Copy it and save it somewhere safe (password manager, notes app, etc.).
-                      </Alert>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <TextField
-                          fullWidth
-                          label="Your Setup Code"
-                          value={generatedCode}
-                          multiline
-                          rows={3}
-                          slotProps={{ input: { readOnly: true, sx: { fontFamily: 'monospace', fontSize: '0.75rem' } } }}
-                        />
-                        <Button variant="contained" startIcon={<ContentCopyIcon />} onClick={copySetupCode} sx={{ alignSelf: 'flex-start', mt: 1 }}>
-                          Copy
-                        </Button>
-                      </Box>
-                    </Grid>
-                  )}
-                </Grid>
-              </>
-            )}
           </CardContent>
         </Card>
 
