@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getConfigFromRequest, writeConfigFile, isConfiguredFromRequest, buildConfigCookieHeader } from '@/lib/config';
+import { getConfigFromRequest, writeConfigFile, isConfiguredFromRequest, buildConfigCookieHeader, CONFIG_COOKIE } from '@/lib/config';
 import { encrypt, decrypt } from '@/lib/crypto';
 import { google } from 'googleapis';
 
@@ -385,6 +385,25 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         return Response.json({ success: false, error: (err as Error).message, hint: 'Credentials were restored from the setup code but the connection test failed. The service account may need access to this spreadsheet again.' });
       }
+    }
+
+    // ====== Logout — wipe all credentials from disk + expire the cookie ======
+    if (action === 'logout') {
+      writeConfigFile({
+        googleServiceAccountEmail: '',
+        googlePrivateKey: '',
+        googleSpreadsheetId: '',
+        googleClientId: '',
+        googleClientSecret: '',
+        calendarSecretToken: '',
+        powerschoolUrl: '',
+        powerschoolUsername: '',
+        powerschoolPassword: '',
+      });
+      const clearCookie = `${CONFIG_COOKIE}=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0`;
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { 'Content-Type': 'application/json', 'Set-Cookie': clearCookie },
+      });
     }
 
     return Response.json({ error: 'Unknown action' }, { status: 400 });

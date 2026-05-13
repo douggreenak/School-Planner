@@ -13,6 +13,14 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Divider from '@mui/material/Divider';
 import Tooltip from '@mui/material/Tooltip';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import Alert from '@mui/material/Alert';
+import Stack from '@mui/material/Stack';
+import CircularProgress from '@mui/material/CircularProgress';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -29,6 +37,9 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import SettingsBrightnessIcon from '@mui/icons-material/SettingsBrightness';
+import LogoutIcon from '@mui/icons-material/Logout';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { useThemeMode } from '@/components/ThemeRegistry';
 import LoadingOverlay from '@/components/LoadingOverlay';
 import SetupWizard from '@/components/SetupWizard';
@@ -173,6 +184,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [healthOk, setHealthOk] = useState<boolean | null>(null);
   const [healthError, setHealthError] = useState<string | undefined>();
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [logoutBusy, setLogoutBusy] = useState(false);
+  const [configCopied, setConfigCopied] = useState(false);
 
   useEffect(() => {
     const handler = () => setWizardOpen(true);
@@ -226,6 +240,44 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     </Tooltip>
   );
 
+  const copyConfig = async () => {
+    try {
+      const res = await fetch('/api/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'export-config' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await navigator.clipboard.writeText(JSON.stringify(data.config, null, 2));
+        setConfigCopied(true);
+      }
+    } catch {
+      // non-fatal — user can still log out
+    }
+  };
+
+  const doLogout = async () => {
+    setLogoutBusy(true);
+    try {
+      await fetch('/api/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      });
+    } catch {
+      // proceed regardless
+    }
+    localStorage.removeItem('sp-wizard-dismissed');
+    setLogoutBusy(false);
+    setLogoutOpen(false);
+    setConfigCopied(false);
+    setHealthOk(null);
+    router.push('/');
+    // Small delay so the router push lands before the wizard tries to open
+    setTimeout(() => setWizardOpen(true), 400);
+  };
+
   const cycleTheme = () => {
     const next = mode === 'light' ? 'dark' : mode === 'dark' ? 'system' : 'light';
     setMode(next);
@@ -235,7 +287,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const themeLabel = mode === 'light' ? 'Light mode' : mode === 'dark' ? 'Dark mode' : 'System theme';
 
   const drawer = (
-    <Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Toolbar sx={{ gap: 1.5 }}>
         <SchoolIcon sx={{ color: 'primary.main', fontSize: 28 }} />
         <Typography variant="h6" noWrap sx={{ fontWeight: 500, color: 'primary.main', flex: 1 }}>
@@ -249,9 +301,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </Tooltip>
       </Toolbar>
       <Divider />
-      <Suspense fallback={<NavListFallback onItemClick={handleNavClick} />}>
-        <NavListInner onItemClick={handleNavClick} />
-      </Suspense>
+      <Box sx={{ flex: 1, overflow: 'auto' }}>
+        <Suspense fallback={<NavListFallback onItemClick={handleNavClick} />}>
+          <NavListInner onItemClick={handleNavClick} />
+        </Suspense>
+      </Box>
+      <Divider />
+      <List sx={{ px: 1, pb: 1 }}>
+        <ListItemButton onClick={() => { setConfigCopied(false); setLogoutOpen(true); }} sx={{ borderRadius: 1 }}>
+          <ListItemIcon sx={{ minWidth: 40, color: 'text.secondary' }}>
+            <LogoutIcon />
+          </ListItemIcon>
+          <ListItemText primary="Log Out" slotProps={{ primary: { sx: { fontSize: '0.875rem' } } }} />
+        </ListItemButton>
+      </List>
     </Box>
   );
 
@@ -259,6 +322,53 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <LoadingOverlay />
       <SetupWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
+
+      {/* Logout confirmation dialog */}
+      <Dialog open={logoutOpen} maxWidth="xs" fullWidth onClose={() => !logoutBusy && setLogoutOpen(false)}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <LogoutIcon fontSize="small" /> Log Out
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2}>
+            <Typography variant="body2">
+              Logging out will clear all saved credentials from this server. You will need to reconfigure or paste your config to get back in.
+            </Typography>
+            <Alert severity="warning" sx={{ fontSize: '0.85rem' }}>
+              <Typography variant="body2" component="span">
+                <strong>Save your config first!</strong>{' '}Without it you&apos;ll have to re-enter your Google credentials manually.
+              </Typography>
+            </Alert>
+            <Button
+              variant="outlined"
+              fullWidth
+              startIcon={configCopied ? <CheckCircleIcon color="success" /> : <ContentCopyIcon />}
+              onClick={copyConfig}
+              color={configCopied ? 'success' : 'primary'}
+            >
+              {configCopied ? 'Config copied to clipboard!' : 'Copy Config to Clipboard'}
+            </Button>
+            {configCopied && (
+              <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
+                Paste this in Settings → Quick Setup on your next device or session.
+              </Typography>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setLogoutOpen(false)} disabled={logoutBusy}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={logoutBusy ? <CircularProgress size={16} color="inherit" /> : <LogoutIcon />}
+            onClick={doLogout}
+            disabled={logoutBusy}
+          >
+            {configCopied ? 'Log Out' : 'Log Out Anyway'}
+          </Button>
+        </DialogActions>
+      </Dialog>
       {/* App bar – mobile only */}
       {isMobile && (
         <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
