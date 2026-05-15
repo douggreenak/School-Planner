@@ -1,8 +1,16 @@
+import { NextRequest } from 'next/server';
 import { getSettings, setSetting, initializeDatabase } from '@/lib/db';
+import { getSessionUserId } from '@/lib/auth';
 
-export async function GET() {
+function unauth() {
+  return Response.json({ error: 'Unauthorized' }, { status: 401 });
+}
+
+export async function GET(request: Request) {
   try {
-    const settings = await getSettings();
+    const userId = await getSessionUserId(request);
+    if (!userId) return unauth();
+    const settings = await getSettings(userId);
     return Response.json(settings);
   } catch (error) {
     console.error('GET /api/settings error:', error);
@@ -10,11 +18,13 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const userId = await getSessionUserId(request);
+    if (!userId) return unauth();
     const { key, value } = await request.json();
     if (!key) return Response.json({ error: 'Missing key' }, { status: 400 });
-    await setSetting(key, value);
+    await setSetting(key, value, userId);
     return Response.json({ success: true });
   } catch (error) {
     console.error('POST /api/settings error:', error);
@@ -24,6 +34,8 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const userId = await getSessionUserId(request);
+    if (!userId) return unauth();
     const { action } = await request.json();
     if (action === 'initialize') {
       await initializeDatabase();

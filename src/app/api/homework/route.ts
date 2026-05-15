@@ -1,10 +1,17 @@
 import { NextRequest } from 'next/server';
 import { getHomework, addHomework, updateHomework, deleteHomework } from '@/lib/db';
+import { getSessionUserId } from '@/lib/auth';
 import type { Homework } from '@/types';
 
-export async function GET() {
+function unauth() {
+  return Response.json({ error: 'Unauthorized' }, { status: 401 });
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const homework = await getHomework();
+    const userId = await getSessionUserId(request);
+    if (!userId) return unauth();
+    const homework = await getHomework(userId);
     return Response.json(homework);
   } catch (error) {
     console.error('GET /api/homework error:', error);
@@ -14,8 +21,10 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getSessionUserId(request);
+    if (!userId) return unauth();
     const body: Homework = await request.json();
-    await addHomework(body);
+    await addHomework(body, userId);
     return Response.json({ success: true });
   } catch (error) {
     console.error('POST /api/homework error:', error);
@@ -25,8 +34,10 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const userId = await getSessionUserId(request);
+    if (!userId) return unauth();
     const body: Homework = await request.json();
-    await updateHomework(body);
+    await updateHomework(body, userId);
     return Response.json({ success: true });
   } catch (error) {
     console.error('PUT /api/homework error:', error);
@@ -36,10 +47,12 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getSessionUserId(request);
+    if (!userId) return unauth();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
-    await deleteHomework(id);
+    await deleteHomework(id, userId);
     return Response.json({ success: true });
   } catch (error) {
     console.error('DELETE /api/homework error:', error);

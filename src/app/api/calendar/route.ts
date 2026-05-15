@@ -7,29 +7,35 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const token = searchParams.get('token');
+    // userId scopes the feed to one user's data; included in the URL when the
+    // user copies their calendar link from Settings.
+    const userId = searchParams.get('userId') ?? '';
 
-    // Validate token against config file AND settings sheet
+    if (!userId) {
+      return new Response('Missing userId parameter', { status: 400 });
+    }
+
+    // Token is always required — no token configured means no access
     const cfg = getConfigFromRequest(request);
-    let savedSettings = await getSettings();
+    const savedSettings = await getSettings(userId);
     const validToken = cfg.calendarSecretToken || savedSettings.calendarToken;
-    if (validToken && token !== validToken) {
+    if (!validToken || token !== validToken) {
       return new Response('Unauthorized', { status: 401 });
     }
 
     const [classes, exams, homework, disruptions, freshSettings] = await Promise.all([
-      getClasses(),
-      getExams(),
-      getHomework(),
-      getDisruptions(),
-      getSettings(),
+      getClasses(userId),
+      getExams(userId),
+      getHomework(userId),
+      getDisruptions(userId),
+      getSettings(userId),
     ]);
 
     const semesterStart = freshSettings.semesterStart || '2026-01-12';
     const semesterEnd = freshSettings.semesterEnd || '2026-06-15';
     const schoolName = freshSettings.schoolName || 'School';
 
-    // Inject a synthetic Lunch class into the calendar feed so users see
-    // their lunch block even when it's not stored as a persistent class.
+    // Inject a synthetic Lunch class into the calendar feed
     const lunchClass = {
       id: '__lunch__',
       name: 'Lunch',

@@ -1,10 +1,17 @@
 import { NextRequest } from 'next/server';
 import { getTasks, addTask, updateTask, deleteTask, deleteTasksBatch } from '@/lib/db';
+import { getSessionUserId } from '@/lib/auth';
 import type { Task } from '@/types';
 
-export async function GET() {
+function unauth() {
+  return Response.json({ error: 'Unauthorized' }, { status: 401 });
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const tasks = await getTasks();
+    const userId = await getSessionUserId(request);
+    if (!userId) return unauth();
+    const tasks = await getTasks(userId);
     return Response.json(tasks);
   } catch (error) {
     console.error('GET /api/tasks error:', error);
@@ -14,8 +21,10 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getSessionUserId(request);
+    if (!userId) return unauth();
     const body: Task = await request.json();
-    await addTask(body);
+    await addTask(body, userId);
     return Response.json({ success: true });
   } catch (error) {
     console.error('POST /api/tasks error:', error);
@@ -25,8 +34,10 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const userId = await getSessionUserId(request);
+    if (!userId) return unauth();
     const body: Task = await request.json();
-    await updateTask(body);
+    await updateTask(body, userId);
     return Response.json({ success: true });
   } catch (error) {
     console.error('PUT /api/tasks error:', error);
@@ -36,20 +47,19 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getSessionUserId(request);
+    if (!userId) return unauth();
     const { searchParams } = new URL(request.url);
-    // Two flavors: ?id=<one> or ?ids=a,b,c for batch. The batch path collapses
-    // N round-trips into one Sheets API call and is safe against the index-
-    // shift race that parallel single deletes would suffer from.
     const idsParam = searchParams.get('ids');
     if (idsParam) {
       const ids = idsParam.split(',').map((s) => s.trim()).filter(Boolean);
       if (ids.length === 0) return Response.json({ error: 'Empty ids' }, { status: 400 });
-      const deleted = await deleteTasksBatch(ids);
+      const deleted = await deleteTasksBatch(ids, userId);
       return Response.json({ success: true, deleted });
     }
     const id = searchParams.get('id');
     if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
-    await deleteTask(id);
+    await deleteTask(id, userId);
     return Response.json({ success: true });
   } catch (error) {
     console.error('DELETE /api/tasks error:', error);

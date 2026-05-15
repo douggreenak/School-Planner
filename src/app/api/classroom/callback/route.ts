@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getTokens, importAllFromClassroom } from '@/lib/classroom';
-import { addClass, addHomework, getClasses } from '@/lib/db';
+import { syncClassesFromSource, syncHomeworkFromSource } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
     const error = searchParams.get('error');
+    const state = searchParams.get('state');
 
     if (error) {
       return Response.redirect(`${appUrl}/settings?classroom=denied`);
@@ -16,6 +17,17 @@ export async function GET(request: NextRequest) {
 
     if (!code) {
       return Response.redirect(`${appUrl}/settings?classroom=error&msg=no-code`);
+    }
+
+    // Recover userId from OAuth state
+    let userId = '';
+    try {
+      userId = state ? Buffer.from(state, 'base64').toString('utf-8') : '';
+    } catch {
+      userId = '';
+    }
+    if (!userId) {
+      return Response.redirect(`${appUrl}/settings?classroom=error&msg=no-user`);
     }
 
     // Exchange code for tokens
@@ -27,32 +39,16 @@ export async function GET(request: NextRequest) {
     // Import everything
     const result = await importAllFromClassroom(tokens.access_token);
 
-    // Check existing classes to avoid duplicates
-    let existingClasses: string[] = [];
-    try {
-      const current = await getClasses();
-      existingClasses = current.map((c) => c.name.toLowerCase());
-    } catch {
-      // OK if sheets not ready
-    }
-
-    // Save classes (skip dupes)
-    let classCount = 0;
-    for (const cls of result.classes) {
-      if (existingClasses.includes(cls.name.toLowerCase())) continue;
-      await addClass(cls);
-      classCount++;
-    }
-
-    // Save assignments
-    let assignmentCount = 0;
-    for (const hw of result.assignments) {
-      await addHomework(hw);
-      assignmentCount++;
-    }
+    // Use sync helpers to handle deduplication properly
+    const classStats = await syncClassesFromSource('classroom', result.classes, userId);
+    const remappedAssignments = result.assignments.map((a) => ({
+      ...a,
+      classId: classStats.idMap.get(a.classId) ?? a.classId,
+    }));
+    const hwStats = await syncHomeworkFromSource('classroom', remappedAssignments, userId);
 
     return Response.redirect(
-      `${appUrl}/settings?classroom=success&classes=${classCount}&assignments=${assignmentCount}`
+      `${appUrl}/settings?classroom=success&classes=${classStats.added + classStats.updated}&assignments=${hwStats.added + hwStats.updated}`
     );
   } catch (error) {
     console.error('Classroom callback error:', error);

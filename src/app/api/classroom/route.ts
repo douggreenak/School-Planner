@@ -1,8 +1,13 @@
+import { NextRequest } from 'next/server';
 import { getConfigFromRequest } from '@/lib/config';
 import { getAuthUrl } from '@/lib/classroom';
+import { getSessionUserId } from '@/lib/auth';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    const userId = await getSessionUserId(request);
+    if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
     const cfg = getConfigFromRequest(request);
     if (!cfg.googleClientId || !cfg.googleClientSecret) {
       return Response.json({
@@ -11,7 +16,9 @@ export async function GET(request: Request) {
       }, { status: 400 });
     }
 
-    const authUrl = getAuthUrl();
+    // Embed userId in OAuth state so the callback can scope DB writes
+    const state = Buffer.from(userId).toString('base64');
+    const authUrl = getAuthUrl(state);
     return Response.json({ authUrl });
   } catch (error) {
     console.error('GET /api/classroom error:', error);

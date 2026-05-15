@@ -2,11 +2,16 @@ import { NextRequest } from 'next/server';
 import { getConfigFromRequest, writeConfigFile, isConfigured, buildConfigCookieHeader, CONFIG_COOKIE } from '@/lib/config';
 import { encrypt, decrypt } from '@/lib/crypto';
 import { initializeDatabase } from '@/lib/db';
+import { getSessionUserId } from '@/lib/auth';
 
 function withCookie(data: unknown, cookieHeader: string): Response {
   return new Response(JSON.stringify(data), {
     headers: { 'Content-Type': 'application/json', 'Set-Cookie': cookieHeader },
   });
+}
+
+function unauth() {
+  return Response.json({ error: 'Unauthorized' }, { status: 401 });
 }
 
 export async function GET(request: Request) {
@@ -27,14 +32,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action } = body;
 
-    // ====== Initialize database tables ======
+    // ====== Initialize database tables — requires auth ======
     if (action === 'initialize-db') {
+      const userId = await getSessionUserId(request);
+      if (!userId) return unauth();
       await initializeDatabase();
       return Response.json({ success: true, message: 'Database tables ready.' });
     }
 
-    // ====== Save PowerSchool credentials ======
+    // ====== Save PowerSchool credentials — requires auth ======
     if (action === 'save-powerschool') {
+      const userId = await getSessionUserId(request);
+      if (!userId) return unauth();
       const { url, username, password } = body;
       if (!url || !username || !password) {
         return Response.json({ success: false, error: 'URL, username, and password are all required.' });
@@ -43,21 +52,27 @@ export async function POST(request: NextRequest) {
       return withCookie({ success: true }, buildConfigCookieHeader(getConfigFromRequest(request)));
     }
 
-    // ====== Clear saved PowerSchool credentials ======
+    // ====== Clear saved PowerSchool credentials — requires auth ======
     if (action === 'clear-powerschool') {
+      const userId = await getSessionUserId(request);
+      if (!userId) return unauth();
       writeConfigFile({ powerschoolUrl: '', powerschoolUsername: '', powerschoolPassword: '' });
       return withCookie({ success: true }, buildConfigCookieHeader(getConfigFromRequest(request)));
     }
 
-    // ====== Save Classroom OAuth credentials ======
+    // ====== Save Classroom OAuth credentials — requires auth ======
     if (action === 'save-classroom-oauth') {
+      const userId = await getSessionUserId(request);
+      if (!userId) return unauth();
       const { clientId, clientSecret } = body;
       writeConfigFile({ googleClientId: clientId, googleClientSecret: clientSecret });
       return withCookie({ success: true }, buildConfigCookieHeader(getConfigFromRequest(request)));
     }
 
-    // ====== Generate a portable Setup Code (encrypted) ======
+    // ====== Generate a portable Setup Code (encrypted) — requires auth ======
     if (action === 'generate-setup-code') {
+      const userId = await getSessionUserId(request);
+      if (!userId) return unauth();
       const { passphrase } = body;
       if (!passphrase || passphrase.length < 4) {
         return Response.json({ success: false, error: 'Passphrase must be at least 4 characters.' });
@@ -74,8 +89,10 @@ export async function POST(request: NextRequest) {
       return Response.json({ success: true, setupCode: `SP2-${code}` });
     }
 
-    // ====== Restore credentials from a Setup Code ======
+    // ====== Restore credentials from a Setup Code — requires auth ======
     if (action === 'use-setup-code') {
+      const userId = await getSessionUserId(request);
+      if (!userId) return unauth();
       const { setupCode, passphrase } = body;
       if (!setupCode || !passphrase) {
         return Response.json({ success: false, error: 'Setup code and passphrase are required.' });
@@ -105,8 +122,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ====== Logout — wipe all credentials from disk + expire the cookie ======
+    // ====== Export config — requires auth ======
+    if (action === 'export-config') {
+      const userId = await getSessionUserId(request);
+      if (!userId) return unauth();
+      const cfg = getConfigFromRequest(request);
+      return Response.json({ success: true, config: cfg });
+    }
+
+    // ====== Logout (legacy config reset) — requires auth ======
     if (action === 'logout') {
+      const userId = await getSessionUserId(request);
+      if (!userId) return unauth();
       writeConfigFile({
         googleClientId: '',
         googleClientSecret: '',

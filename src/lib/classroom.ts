@@ -23,11 +23,12 @@ function getOAuth2Client() {
 /**
  * Generate OAuth2 authorization URL for Google Classroom access.
  */
-export function getAuthUrl(): string {
+export function getAuthUrl(state?: string): string {
   const client = getOAuth2Client();
   return client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
+    ...(state ? { state } : {}),
     scope: [
       'https://www.googleapis.com/auth/classroom.courses.readonly',
       'https://www.googleapis.com/auth/classroom.coursework.me.readonly',

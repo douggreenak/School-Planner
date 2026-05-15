@@ -3,11 +3,16 @@
 // Diagnostic endpoint: dumps class IDs and how many homework
 // rows point to each class. Helps trace classId mismatches.
 // ============================================================
+import { NextRequest } from 'next/server';
 import { getClasses, getHomework } from '@/lib/db';
+import { getSessionUserId } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const [classes, homework] = await Promise.all([getClasses(), getHomework()]);
+    const userId = await getSessionUserId(request);
+    if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const [classes, homework] = await Promise.all([getClasses(userId), getHomework(userId)]);
 
     const hwCountByClassId = new Map<string, number>();
     for (const h of homework) {

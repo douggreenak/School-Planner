@@ -1,16 +1,18 @@
+import { NextRequest } from 'next/server';
 import { getClasses, updateClass } from '@/lib/db';
+import { getSessionUserId } from '@/lib/auth';
 
 function normalizeName(s?: string | null) {
   if (!s) return '';
-  return String(s).replace(/ /g, ' ').replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase();
+  return String(s).replace(/ /g, ' ').replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase();
 }
 
-// Best-effort one-time migration: link existing manual rows to PowerSchool
-// by normalizing names and matching period numbers. Sets source='powerschool'
-// and sourceId so future syncs can deduplicate properly.
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    const classes = await getClasses();
+    const userId = await getSessionUserId(request);
+    if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const classes = await getClasses(userId);
 
     const psByKey = new Map<string, { id: string; sourceId?: string }>();
     for (const c of classes) {
@@ -29,7 +31,7 @@ export async function POST() {
       const match = psByKey.get(key);
       if (!match) continue;
 
-      await updateClass({ ...c, source: 'powerschool', sourceId: match.sourceId ?? key });
+      await updateClass({ ...c, source: 'powerschool', sourceId: match.sourceId ?? key }, userId);
       migrated++;
     }
 
