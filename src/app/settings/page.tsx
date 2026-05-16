@@ -572,34 +572,49 @@ function SettingsInner() {
                 if (!confirm('Apply the Lathrop HS default bell schedule to all classes? This will update days and per-day times for each period.')) return;
                 setSyncing('apply-default');
                 try {
-                  const weekTemplate: Record<number, Record<number, { start: string; end: string }>> = {
+                  // Slot keys: 'ext' = Extension (Tue/Wed/Thu 7:30-8:05), 1..6 = Periods 1-6.
+                  type SlotKey = 'ext' | 1 | 2 | 3 | 4 | 5 | 6;
+                  const weekTemplate: Record<number, Partial<Record<SlotKey, { start: string; end: string }>>> = {
                     1: { 1: { start: '07:30', end: '08:24' }, 2: { start: '08:31', end: '09:25' }, 3: { start: '09:32', end: '10:26' }, 4: { start: '11:04', end: '11:58' }, 5: { start: '12:05', end: '12:59' }, 6: { start: '13:06', end: '14:00' } },
-                    2: { 1: { start: '08:13', end: '09:26' }, 2: { start: '09:34', end: '10:47' }, 4: { start: '11:26', end: '12:39' }, 5: { start: '12:47', end: '14:00' } },
-                    3: { 2: { start: '08:13', end: '09:26' }, 3: { start: '09:34', end: '10:47' }, 5: { start: '11:26', end: '12:39' }, 6: { start: '12:47', end: '14:00' } },
-                    4: { 1: { start: '08:13', end: '09:26' }, 3: { start: '09:34', end: '10:47' }, 4: { start: '11:26', end: '12:39' }, 6: { start: '12:47', end: '14:00' } },
+                    2: { ext: { start: '07:30', end: '08:05' }, 1: { start: '08:13', end: '09:26' }, 2: { start: '09:34', end: '10:47' }, 4: { start: '11:26', end: '12:39' }, 5: { start: '12:47', end: '14:00' } },
+                    3: { ext: { start: '07:30', end: '08:05' }, 2: { start: '08:13', end: '09:26' }, 3: { start: '09:34', end: '10:47' }, 5: { start: '11:26', end: '12:39' }, 6: { start: '12:47', end: '14:00' } },
+                    4: { ext: { start: '07:30', end: '08:05' }, 1: { start: '08:13', end: '09:26' }, 3: { start: '09:34', end: '10:47' }, 4: { start: '11:26', end: '12:39' }, 6: { start: '12:47', end: '14:00' } },
                     5: { 1: { start: '07:30', end: '08:24' }, 2: { start: '08:31', end: '09:25' }, 3: { start: '09:32', end: '10:26' }, 4: { start: '11:04', end: '11:58' }, 5: { start: '12:05', end: '12:59' }, 6: { start: '13:06', end: '14:00' } },
                   };
+                  // Detect Extension period by name. Lathrop's Extension block is
+                  // typically labeled "Ext Seminar" / "Extension" / "Advisory" /
+                  // "Homeroom" in PowerSchool — none of which carry a numeric
+                  // period that maps cleanly to 1-6.
+                  const isExtension = (name: string) => /\b(ext|extension|seminar|advisory|homeroom)\b/i.test(name || '');
                   const promises: Promise<Response>[] = [];
+                  let skipped = 0;
                   for (const c of importedClasses) {
-                    const period = Number(c.period || 0);
-                    if (!period || period < 1 || period > 6) continue;
+                    // parseInt is lenient — handles "1", "1A", " 2 " all correctly.
+                    const periodNum = parseInt(String(c.period ?? ''), 10);
+                    let slot: SlotKey | null = null;
+                    if (isExtension(c.name)) slot = 'ext';
+                    else if (periodNum >= 1 && periodNum <= 6) slot = periodNum as SlotKey;
+                    if (slot === null) { skipped++; continue; }
                     const days: number[] = [];
                     const dayTimes: Record<number, { startTime: string; endTime: string }> = {};
                     for (let d = 1; d <= 5; d++) {
-                      const dayMap = weekTemplate[d];
-                      if (dayMap && dayMap[period]) {
+                      const slotTime = weekTemplate[d]?.[slot];
+                      if (slotTime) {
                         days.push(d);
-                        dayTimes[d] = { startTime: dayMap[period].start, endTime: dayMap[period].end };
+                        dayTimes[d] = { startTime: slotTime.start, endTime: slotTime.end };
                       }
                     }
-                    if (days.length === 0) continue;
+                    if (days.length === 0) { skipped++; continue; }
                     const firstDay = days[0];
                     const representative = dayTimes[firstDay];
                     const updated = { ...c, startTime: representative.startTime, endTime: representative.endTime, days: days.sort((a, b) => a - b), dayTimes } as SchoolClass;
                     promises.push(fetch('/api/classes', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }));
                   }
                   await Promise.all(promises);
-                  setSnackbar({ open: true, message: 'Lathrop HS bell schedule applied. Review and adjust any class times if needed.', severity: 'success' });
+                  const msg = skipped > 0
+                    ? `Lathrop HS bell schedule applied to ${promises.length} class${promises.length === 1 ? '' : 'es'}. ${skipped} class${skipped === 1 ? '' : 'es'} skipped (no recognizable period 1-6 or Extension) — edit them in the wizard.`
+                    : 'Lathrop HS bell schedule applied. Review and adjust any class times if needed.';
+                  setSnackbar({ open: true, message: msg, severity: 'success' });
                   refetchClassesList();
                   refetchClasses();
                 } catch (err) {
